@@ -13,11 +13,13 @@ interface Props {
 export default function ExportModal({ onClose, fabricRef }: Props) {
   const { exportOptions, setExportOptions, isExporting, setIsExporting, templateAnalysis } = useEditorStore();
   const [done, setDone] = useState(false);
+  const [exportError, setExportError] = useState('');
 
   async function doExport() {
     const canvas = fabricRef.current;
     if (!canvas) return;
     setIsExporting(true);
+    setExportError('');
 
     // Hide guides for export
     const guides = canvas.getObjects().filter((o: any) => o.data?.type === 'guide' || o.data?.type === 'grid');
@@ -56,6 +58,8 @@ export default function ExportModal({ onClose, fabricRef }: Props) {
       }
 
       setDone(true);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'Export failed. Please try again.');
     } finally {
       guides.forEach((o: any) => o.set({ visible: true }));
       canvas.renderAll();
@@ -161,11 +165,15 @@ export default function ExportModal({ onClose, fabricRef }: Props) {
         </div>
 
         <div className="flex items-center gap-3 px-5 py-4 border-t border-forge-border">
+          {exportError ? (
+            <p className="text-xs text-forge-error flex-1 min-w-0 truncate">{exportError}</p>
+          ) : (
+            <div className="flex-1" />
+          )}
           <Button variant="secondary" size="sm" onClick={onClose} disabled={isExporting}>Cancel</Button>
           <Button
             variant="primary"
             size="sm"
-            className="ml-auto"
             loading={isExporting}
             icon={done ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />}
             onClick={done ? onClose : doExport}

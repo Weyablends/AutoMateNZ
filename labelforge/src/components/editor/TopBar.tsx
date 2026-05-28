@@ -60,7 +60,7 @@ export default function TopBar({ fabricRef, onExport }: Props) {
 
       {/* File name */}
       <span className="text-xs text-forge-muted truncate max-w-[160px]">
-        {templateAnalysis?.fileName ?? 'Untitled Label'}
+        {(templateAnalysis?.fileName ?? 'Untitled Label').replace(/\.[^.]+$/, '')}
       </span>
 
       <div className="h-4 w-px bg-forge-border mx-1" />

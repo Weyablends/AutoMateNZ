@@ -25,11 +25,18 @@ const EditorCanvas = dynamic(() => import('@/components/editor/EditorCanvas'), {
   ),
 });
 
+const TOOL_LABELS: Record<string, string> = {
+  select: 'Select', pan: 'Pan', text: 'Text', rect: 'Rectangle',
+  ellipse: 'Ellipse', pen: 'Pen', zoom_in: 'Zoom In', zoom_out: 'Zoom Out',
+};
+
 function StatusBar() {
-  const { zoom, selectedProperties, activeTool } = useEditorStore();
+  const { zoom, selectedProperties, activeTool, exportOptions, templateAnalysis } = useEditorStore();
+  const dims = templateAnalysis?.dimensions;
+  const dimStr = dims ? `${dims.width}×${dims.height}mm` : '—';
   return (
     <div className="h-6 bg-forge-surface border-t border-forge-border flex items-center px-3 gap-4 shrink-0 select-none">
-      <span className="text-2xs text-forge-dim">{activeTool}</span>
+      <span className="text-2xs text-forge-dim">{TOOL_LABELS[activeTool] ?? activeTool}</span>
       <div className="h-3 w-px bg-forge-border" />
       {selectedProperties ? (
         <span className="text-2xs text-forge-muted font-mono">
@@ -40,7 +47,7 @@ function StatusBar() {
       )}
       <div className="ml-auto flex items-center gap-3">
         <span className="text-2xs text-forge-dim font-mono">{Math.round(zoom * 100)}%</span>
-        <span className="text-2xs text-forge-dim">CMYK · 300 DPI · 150×210mm</span>
+        <span className="text-2xs text-forge-dim">{exportOptions.colorProfile} · {exportOptions.resolution} DPI · {dimStr}</span>
       </div>
     </div>
   );

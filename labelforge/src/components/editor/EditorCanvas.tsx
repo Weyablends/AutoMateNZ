@@ -201,6 +201,17 @@ export default function EditorCanvas({ fabricRef }: Props) {
       });
       canvas.on('object:modified', () => saveHistory(canvas));
 
+      // Pen tool: path created after free drawing
+      canvas.on('path:created', (e: any) => {
+        const path = e.path;
+        if (path) {
+          path.set({ data: { id: `path-${Date.now()}`, layer: 'artwork' } });
+          canvas.setActiveObject(path);
+        }
+        useEditorStore.getState().setActiveTool('select');
+        saveHistory(canvas);
+      });
+
       // Snap to grid
       canvas.on('object:moving', (opt: any) => {
         if (!useEditorStore.getState().snapToGrid) return;
@@ -396,13 +407,24 @@ export default function EditorCanvas({ fabricRef }: Props) {
     const cursor = cursorMap[activeTool] || 'default';
     canvas.defaultCursor = cursor;
     canvas.hoverCursor = activeTool === 'select' ? 'move' : cursor;
-    if (activeTool === 'select') {
-      canvas.selection = true;
-      canvas.getObjects().forEach((obj: any) => {
-        if (obj.selectable !== false) obj.set({ selectable: true, evented: true });
-      });
-    } else if (activeTool !== 'rect' && activeTool !== 'ellipse' && activeTool !== 'text') {
+
+    if (activeTool === 'pen') {
+      canvas.isDrawingMode = true;
       canvas.selection = false;
+      if (canvas.freeDrawingBrush) {
+        canvas.freeDrawingBrush.color = '#5B7FFF';
+        canvas.freeDrawingBrush.width = 2;
+      }
+    } else {
+      canvas.isDrawingMode = false;
+      if (activeTool === 'select') {
+        canvas.selection = true;
+        canvas.getObjects().forEach((obj: any) => {
+          if (obj.selectable !== false) obj.set({ selectable: true, evented: true });
+        });
+      } else if (activeTool !== 'rect' && activeTool !== 'ellipse' && activeTool !== 'text') {
+        canvas.selection = false;
+      }
     }
     canvas.renderAll();
   }, [activeTool, fabricRef]);
