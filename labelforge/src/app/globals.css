@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --scrollbar-bg: #17171f;
+  --scrollbar-thumb: #2e2e3e;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  background: #09090e;
+  color: #e4e4f0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a3a50;
+}
+
+/* Selection colour */
+::selection {
+  background: rgba(91, 127, 255, 0.35);
+}
+
+/* Prevent default text cursor on canvas */
+canvas {
+  outline: none;
+}
+
+/* Ruler tick font */
+.ruler-tick {
+  font-size: 9px;
+  font-family: 'JetBrains Mono', monospace;
+  fill: #4a4a60;
+}
+
+/* Shimmer loading */
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    #17171f 25%,
+    #1d1d27 50%,
+    #17171f 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+}
+
+/* Transition defaults */
+.transition-forge {
+  transition: all 0.15s ease;
+}
+
+/* Fabric canvas cursor overrides */
+.upper-canvas {
+  cursor: crosshair !important;
+}
+
+/* Focus ring */
+*:focus-visible {
+  outline: 2px solid #5b7fff;
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* Remove focus ring from canvas */
+canvas:focus-visible {
+  outline: none;
+}
