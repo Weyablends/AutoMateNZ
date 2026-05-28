@@ -3,10 +3,9 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, Tag, CheckCircle2, AlertTriangle, XCircle, Info,
-  Download, FileText, Wrench, ChevronRight, Settings,
+  Download, Wrench, ChevronRight, Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { mockPreflightItems } from '@/lib/mockData';
 import { useEditorStore } from '@/store/editorStore';
 import { cn } from '@/lib/utils';
@@ -26,10 +25,9 @@ const CATEGORY_ORDER = ['Dimensions', 'Bleed', 'Safe Zone', 'Colour', 'Typograph
 
 export default function PreflightPage() {
   const router = useRouter();
-  const { templateAnalysis, exportOptions, setExportOptions, isExporting } = useEditorStore();
-  const [filterStatus, setFilterStatus] = useState<PreflightStatus | 'all'>('all');
-  const [expandedItem, setExpandedItem] = useState<string | null>(null);
-  const [exportStarted, setExportStarted] = useState(false);
+  const { templateAnalysis, exportOptions, setExportOptions, isExporting, setPendingExport } = useEditorStore();
+  const [filterStatus, setFilterStatus] = useState('all' as PreflightStatus | 'all');
+  const [expandedItem, setExpandedItem] = useState(null as string | null);
 
   useEffect(() => {
     if (!templateAnalysis) router.replace('/');
@@ -77,7 +75,7 @@ export default function PreflightPage() {
             icon={<Download className="w-3.5 h-3.5" />}
             disabled={!canExport}
             loading={isExporting}
-            onClick={() => { setExportStarted(true); router.push('/editor'); }}
+            onClick={() => { setPendingExport(true); router.push('/editor'); }}
           >
             Export Print-Ready PDF
           </Button>
@@ -324,7 +322,7 @@ export default function PreflightPage() {
             icon={<Download className="w-4 h-4" />}
             disabled={!canExport}
             loading={isExporting}
-            onClick={() => router.push('/editor')}
+            onClick={() => { setPendingExport(true); router.push('/editor'); }}
             className="w-full"
           >
             Export {exportOptions.format.toUpperCase()}

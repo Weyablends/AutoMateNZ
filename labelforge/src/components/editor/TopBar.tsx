@@ -37,7 +37,9 @@ export default function TopBar({ fabricRef, onExport }: Props) {
     window.dispatchEvent(event);
   }
 
-  const preflightIssues = 5; // mock
+  const unackedCritical = templateAnalysis?.instructions.filter((i) => i.priority === 'critical' && !i.acknowledged).length ?? 0;
+  const unackedTotal = templateAnalysis?.instructions.filter((i) => !i.acknowledged).length ?? 0;
+  const preflightIssues = unackedCritical > 0 ? unackedCritical : unackedTotal;
 
   return (
     <header className="h-11 bg-forge-surface border-b border-forge-border flex items-center px-3 gap-2 shrink-0 select-none">
@@ -164,7 +166,7 @@ export default function TopBar({ fabricRef, onExport }: Props) {
         ) : (
           <CheckCircle2 className="w-3.5 h-3.5" />
         )}
-        Preflight {preflightIssues > 0 ? `(${preflightIssues} issues)` : 'Ready'}
+        Preflight {preflightIssues > 0 ? `(${preflightIssues})` : 'Ready'}
       </button>
 
       <Button

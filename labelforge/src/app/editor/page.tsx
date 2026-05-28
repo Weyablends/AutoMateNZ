@@ -49,12 +49,22 @@ function StatusBar() {
 export default function EditorPage() {
   const router = useRouter();
   const fabricRef = useRef<any>(null);
-  const { templateAnalysis, preflightOpen, setPreflightOpen, qrModalOpen, setQrModalOpen } = useEditorStore();
+  const {
+    templateAnalysis, preflightOpen, setPreflightOpen,
+    qrModalOpen, setQrModalOpen, pendingExport, setPendingExport,
+  } = useEditorStore();
   const [exportOpen, setExportOpen] = useState(false);
 
   useEffect(() => {
     if (!templateAnalysis) router.replace('/');
   }, [templateAnalysis, router]);
+
+  useEffect(() => {
+    if (pendingExport) {
+      setPendingExport(false);
+      setExportOpen(true);
+    }
+  }, [pendingExport, setPendingExport]);
 
   if (!templateAnalysis) return null;
 

@@ -51,6 +51,7 @@ interface EditorState {
   isExporting: boolean;
   preflightOpen: boolean;
   qrModalOpen: boolean;
+  pendingExport: boolean;
 }
 
 interface EditorActions {
@@ -75,6 +76,7 @@ interface EditorActions {
   setIsExporting: (v: boolean) => void;
   setPreflightOpen: (v: boolean) => void;
   setQrModalOpen: (v: boolean) => void;
+  setPendingExport: (v: boolean) => void;
   acknowledgeInstruction: (id: string) => void;
 }
 
@@ -123,6 +125,7 @@ export const useEditorStore = create<EditorState & EditorActions>()(
     isExporting: false,
     preflightOpen: false,
     qrModalOpen: false,
+    pendingExport: false,
 
     setTemplateAnalysis: (analysis) => set((s) => { s.templateAnalysis = analysis; }),
     setTemplateFile: (file) => set((s) => { s.templateFile = file; }),
@@ -153,6 +156,7 @@ export const useEditorStore = create<EditorState & EditorActions>()(
     setIsExporting: (v) => set((s) => { s.isExporting = v; }),
     setPreflightOpen: (v) => set((s) => { s.preflightOpen = v; }),
     setQrModalOpen: (v) => set((s) => { s.qrModalOpen = v; }),
+    setPendingExport: (v) => set((s) => { s.pendingExport = v; }),
     acknowledgeInstruction: (id) =>
       set((s) => {
         if (s.templateAnalysis) {

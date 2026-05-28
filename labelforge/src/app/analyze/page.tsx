@@ -111,8 +111,8 @@ function DiagramView() {
 export default function AnalyzePage() {
   const router = useRouter();
   const { templateAnalysis, acknowledgeInstruction } = useEditorStore();
-  const [activeTab, setActiveTab] = useState<'specs' | 'layers' | 'instructions' | 'notes'>('specs');
-  const [filterPriority, setFilterPriority] = useState<InstructionPriority | 'all'>('all');
+  const [activeTab, setActiveTab] = useState('specs' as 'specs' | 'layers' | 'instructions' | 'notes');
+  const [filterPriority, setFilterPriority] = useState('all' as InstructionPriority | 'all');
 
   useEffect(() => {
     if (!templateAnalysis) router.replace('/');

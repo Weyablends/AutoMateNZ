@@ -201,6 +201,17 @@ export default function EditorCanvas({ fabricRef }: Props) {
       });
       canvas.on('object:modified', () => saveHistory(canvas));
 
+      // Snap to grid
+      canvas.on('object:moving', (opt: any) => {
+        if (!useEditorStore.getState().snapToGrid) return;
+        const gridPx = mmToPx(5);
+        const obj = opt.target;
+        obj.set({
+          left: Math.round((obj.left ?? 0) / gridPx) * gridPx,
+          top: Math.round((obj.top ?? 0) / gridPx) * gridPx,
+        });
+      });
+
       // Mouse events for tools
       canvas.on('mouse:down', (opt: any) => {
         const { e, pointer } = opt;

@@ -26,7 +26,7 @@ const SPECIAL_TOOLS: { label: string; icon: React.ReactNode; action: string }[] 
 ];
 
 export default function ToolsPanel() {
-  const { activeTool, setActiveTool, setQrModalOpen } = useEditorStore();
+  const { activeTool, setActiveTool, setQrModalOpen, zoom, setZoom } = useEditorStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handleSpecialTool(action: string) {
@@ -106,21 +106,25 @@ export default function ToolsPanel() {
 
       <div className="h-px bg-forge-border my-1" />
 
-      {/* Zoom shortcuts */}
+      {/* Zoom */}
       <p className="px-2.5 text-2xs text-forge-dim uppercase tracking-wider mb-1">Zoom</p>
       <button
-        onClick={() => setActiveTool('zoom_in')}
-        className={cn('flex items-center gap-2.5 w-full px-2.5 py-2 rounded-lg text-xs transition-all',
-          activeTool === 'zoom_in' ? 'bg-forge-accent/20 text-forge-accent' : 'text-forge-muted hover:bg-forge-panel hover:text-forge-text')}
+        onClick={() => setZoom(Math.min(5, zoom * 1.25))}
+        className="flex items-center gap-2.5 w-full px-2.5 py-2 rounded-lg text-xs text-forge-muted hover:bg-forge-panel hover:text-forge-text transition-all"
       >
         <ZoomIn className="w-3.5 h-3.5" /> Zoom In
       </button>
       <button
-        onClick={() => setActiveTool('zoom_out')}
-        className={cn('flex items-center gap-2.5 w-full px-2.5 py-2 rounded-lg text-xs transition-all',
-          activeTool === 'zoom_out' ? 'bg-forge-accent/20 text-forge-accent' : 'text-forge-muted hover:bg-forge-panel hover:text-forge-text')}
+        onClick={() => setZoom(Math.max(0.1, zoom / 1.25))}
+        className="flex items-center gap-2.5 w-full px-2.5 py-2 rounded-lg text-xs text-forge-muted hover:bg-forge-panel hover:text-forge-text transition-all"
       >
         <ZoomOut className="w-3.5 h-3.5" /> Zoom Out
+      </button>
+      <button
+        onClick={() => setZoom(1)}
+        className="flex items-center gap-2.5 w-full px-2.5 py-2 rounded-lg text-xs text-forge-muted hover:bg-forge-panel hover:text-forge-text transition-all"
+      >
+        <span className="w-3.5 h-3.5 text-center text-2xs font-bold">1:1</span> Reset Zoom
       </button>
     </div>
   );

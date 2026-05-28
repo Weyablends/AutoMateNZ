@@ -1,10 +1,19 @@
 'use client';
 import { useState } from 'react';
-import { Move, RotateCw, AlignLeft, AlignCenter, AlignRight, Bold, Italic, Underline } from 'lucide-react';
+import {
+  Move, AlignLeft, AlignCenter, AlignRight, Bold, Italic, Underline,
+  AlignStartVertical, AlignCenterVertical, AlignEndVertical,
+  AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
+  BringToFront, SendToBack, FlipHorizontal, FlipVertical,
+  ChevronsUp, ChevronsDown,
+} from 'lucide-react';
 import { useEditorStore } from '@/store/editorStore';
 import { hexToCmyk, cmykToHex } from '@/lib/colorUtils';
 import { cn } from '@/lib/utils';
 import type { ObjectProperties } from '@/lib/types';
+
+const SCALE = 3.78;
+const PADDING = 80;
 
 function Label({ children }: { children: React.ReactNode }) {
   return <span className="text-2xs text-forge-dim uppercase tracking-wider">{children}</span>;
@@ -80,8 +89,14 @@ function CmykSliders({ hex, onChange }: { hex: string; onChange: (hex: string) =
 }
 
 export default function PropertiesPanel({ fabricRef }: { fabricRef: React.MutableRefObject<any> }) {
-  const { selectedProperties, setSelectedObject } = useEditorStore();
+  const { selectedProperties, setSelectedObject, templateAnalysis } = useEditorStore();
   const [colorMode, setColorMode] = useState('hex' as 'hex' | 'cmyk');
+
+  const dims = templateAnalysis?.dimensions ?? { width: 150, height: 210 };
+  const labelW = dims.width * SCALE;
+  const labelH = dims.height * SCALE;
+  const labelOX = PADDING;
+  const labelOY = PADDING;
 
   function readObjProps(obj: any): ObjectProperties {
     return {
@@ -118,6 +133,31 @@ export default function PropertiesPanel({ fabricRef }: { fabricRef: React.Mutabl
     else if (key === 'height') obj.scaleToHeight(Math.max(1, value));
     else                       obj.set(key, key === 'opacity' ? value / 100 : value);
 
+    canvas.renderAll();
+    setSelectedObject(obj.data?.id || 'obj', readObjProps(obj));
+  }
+
+  function alignObject(type: string) {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    const obj = canvas.getActiveObject();
+    if (!obj || obj.data?.type === 'guide') return;
+    const ow = obj.getScaledWidth();
+    const oh = obj.getScaledHeight();
+    switch (type) {
+      case 'left':      obj.set({ left: labelOX }); break;
+      case 'center-h':  obj.set({ left: labelOX + (labelW - ow) / 2 }); break;
+      case 'right':     obj.set({ left: labelOX + labelW - ow }); break;
+      case 'top':       obj.set({ top: labelOY }); break;
+      case 'center-v':  obj.set({ top: labelOY + (labelH - oh) / 2 }); break;
+      case 'bottom':    obj.set({ top: labelOY + labelH - oh }); break;
+      case 'front':     canvas.bringToFront(obj); break;
+      case 'forward':   canvas.bringForward(obj); break;
+      case 'backward':  canvas.sendBackwards(obj); break;
+      case 'back':      canvas.sendToBack(obj); break;
+      case 'flip-h':    obj.set({ flipX: !obj.flipX }); break;
+      case 'flip-v':    obj.set({ flipY: !obj.flipY }); break;
+    }
     canvas.renderAll();
     setSelectedObject(obj.data?.id || 'obj', readObjProps(obj));
   }
@@ -264,6 +304,66 @@ export default function PropertiesPanel({ fabricRef }: { fabricRef: React.Mutabl
           </div>
         </div>
       )}
+
+      {/* Alignment */}
+      <div className="px-3 py-3 border-b border-forge-border space-y-2">
+        <Label>Align to Label</Label>
+        <div className="grid grid-cols-3 gap-1">
+          {[
+            { type: 'left',     icon: <AlignStartVertical className="w-3 h-3" />,     title: 'Align left' },
+            { type: 'center-h', icon: <AlignCenterVertical className="w-3 h-3" />,    title: 'Center horizontal' },
+            { type: 'right',    icon: <AlignEndVertical className="w-3 h-3" />,       title: 'Align right' },
+            { type: 'top',      icon: <AlignStartHorizontal className="w-3 h-3" />,   title: 'Align top' },
+            { type: 'center-v', icon: <AlignCenterHorizontal className="w-3 h-3" />,  title: 'Center vertical' },
+            { type: 'bottom',   icon: <AlignEndHorizontal className="w-3 h-3" />,     title: 'Align bottom' },
+          ].map(({ type, icon, title }) => (
+            <button
+              key={type}
+              onClick={() => alignObject(type)}
+              title={title}
+              className="flex items-center justify-center py-1.5 rounded border border-forge-border text-forge-dim hover:bg-forge-panel hover:text-forge-text transition-all"
+            >
+              {icon}
+            </button>
+          ))}
+        </div>
+
+        <Label>Order</Label>
+        <div className="grid grid-cols-4 gap-1">
+          {[
+            { type: 'front',    icon: <BringToFront className="w-3 h-3" />,  title: 'Bring to front' },
+            { type: 'forward',  icon: <ChevronsUp className="w-3 h-3" />,    title: 'Bring forward' },
+            { type: 'backward', icon: <ChevronsDown className="w-3 h-3" />,  title: 'Send backward' },
+            { type: 'back',     icon: <SendToBack className="w-3 h-3" />,    title: 'Send to back' },
+          ].map(({ type, icon, title }) => (
+            <button
+              key={type}
+              onClick={() => alignObject(type)}
+              title={title}
+              className="flex items-center justify-center py-1.5 rounded border border-forge-border text-forge-dim hover:bg-forge-panel hover:text-forge-text transition-all"
+            >
+              {icon}
+            </button>
+          ))}
+        </div>
+
+        <Label>Flip</Label>
+        <div className="grid grid-cols-2 gap-1">
+          {[
+            { type: 'flip-h', icon: <FlipHorizontal className="w-3 h-3" />, title: 'Flip horizontal' },
+            { type: 'flip-v', icon: <FlipVertical className="w-3 h-3" />,   title: 'Flip vertical' },
+          ].map(({ type, icon, title }) => (
+            <button
+              key={type}
+              onClick={() => alignObject(type)}
+              title={title}
+              className="flex items-center justify-center py-1.5 rounded border border-forge-border text-forge-dim hover:bg-forge-panel hover:text-forge-text transition-all"
+            >
+              {icon}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Layer assignment */}
       <div className="px-3 py-3 space-y-2">
