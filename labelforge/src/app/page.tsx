@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDropzone } from 'react-dropzone';
 import {
@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { cn, sleep, formatFileSize } from '@/lib/utils';
 import { useEditorStore } from '@/store/editorStore';
 import { mockTemplateAnalysis } from '@/lib/mockData';
+import { parseTemplateFile } from '@/lib/templateParser';
 
 type UploadStep = 'idle' | 'uploading' | 'analysing' | 'done';
 
@@ -65,10 +66,14 @@ export default function UploadPage() {
   const [designFile, setDesignFileLocal] = useState(null as FileInfo | null);
   const [step, setStep] = useState('idle' as UploadStep);
   const [analysisStep, setAnalysisStep] = useState(0);
+  const templateFileObjRef = useRef(null as File | null);
 
   const onTemplateDrop = useCallback((files: File[]) => {
     const f = files[0];
-    if (f) setTemplateFileLocal({ name: f.name, size: f.size, type: f.type });
+    if (f) {
+      setTemplateFileLocal({ name: f.name, size: f.size, type: f.type });
+      templateFileObjRef.current = f;
+    }
   }, []);
 
   const onDesignDrop = useCallback((files: File[]) => {
@@ -104,20 +109,33 @@ export default function UploadPage() {
   async function handleAnalyse() {
     if (!templateFile) return;
     setStep('uploading');
-    await sleep(600);
+    await sleep(500);
     setStep('analysing');
-    for (let i = 0; i < analysisSteps.length; i++) {
-      setAnalysisStep(i);
-      await sleep(380 + Math.random() * 200);
-    }
-    const extRaw = templateFile.name.split('.').pop() || 'pdf';
-    const analysis = {
-      ...mockTemplateAnalysis,
-      fileName: templateFile.name,
-      fileType: extRaw.toUpperCase() as 'PDF',
-      fileSize: formatFileSize(templateFile.size),
+
+    const animate = async () => {
+      for (let i = 0; i < analysisSteps.length; i++) {
+        setAnalysisStep(i);
+        await sleep(360 + Math.random() * 200);
+      }
     };
-    setTemplateAnalysis(analysis);
+
+    const parse = async () => {
+      const fileObj = templateFileObjRef.current;
+      if (!fileObj) return mockTemplateAnalysis;
+      try {
+        return await parseTemplateFile(fileObj);
+      } catch (_) {
+        return mockTemplateAnalysis;
+      }
+    };
+
+    const [, analysis] = await Promise.all([animate(), parse()]);
+
+    setTemplateAnalysis({
+      ...analysis,
+      fileName: templateFile.name,
+      fileSize: formatFileSize(templateFile.size),
+    });
     setTemplateFile({ name: templateFile.name, type: templateFile.type });
     if (designFile) setDesignFile({ name: designFile.name, type: designFile.type });
     setStep('done');

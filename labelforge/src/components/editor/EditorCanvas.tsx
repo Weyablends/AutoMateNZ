@@ -157,6 +157,9 @@ export default function EditorCanvas({ fabricRef }: Props) {
     fontSize: obj.fontSize,
     fontFamily: obj.fontFamily,
     fontWeight: obj.fontWeight,
+    fontStyle: obj.fontStyle,
+    underline: obj.underline,
+    textAlign: obj.textAlign,
     text: obj.text,
   });
 
@@ -452,6 +455,18 @@ export default function EditorCanvas({ fabricRef }: Props) {
         canvas.setActiveObject(group);
         canvas.renderAll();
         saveHistory(canvas);
+      });
+    };
+    (window as any).__lf_addQRCode = (dataUrl: string, sizeMm: number) => {
+      import('fabric').then(({ fabric }) => {
+        fabric.Image.fromURL(dataUrl, (img: any) => {
+          img.scaleToWidth(mmToPx(sizeMm));
+          img.set({ left: labelOriginX + 20, top: labelOriginY + 20, data: { id: `qr-${Date.now()}`, layer: 'barcode', name: 'QR Code' } });
+          canvas.add(img);
+          canvas.setActiveObject(img);
+          canvas.renderAll();
+          saveHistory(canvas);
+        });
       });
     };
     (window as any).__lf_addNutritionPanel = (data: any) => {

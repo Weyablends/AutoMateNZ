@@ -1,7 +1,7 @@
 'use client';
 import {
   MousePointer2, Hand, Type, Square, Circle, Pen,
-  Image as ImageIcon, Barcode, Table2, ZoomIn, ZoomOut,
+  Image as ImageIcon, Barcode, Table2, ZoomIn, ZoomOut, QrCode,
 } from 'lucide-react';
 import { Tooltip } from '@/components/ui/tooltip';
 import { useEditorStore } from '@/store/editorStore';
@@ -21,11 +21,12 @@ const TOOLS: { mode: ToolMode; icon: React.ReactNode; label: string; shortcut?: 
 const SPECIAL_TOOLS: { label: string; icon: React.ReactNode; action: string }[] = [
   { label: 'Place Image', icon: <ImageIcon className="w-3.5 h-3.5" />, action: 'image' },
   { label: 'Add Barcode', icon: <Barcode className="w-3.5 h-3.5" />, action: 'barcode' },
+  { label: 'QR Code', icon: <QrCode className="w-3.5 h-3.5" />, action: 'qr' },
   { label: 'Nutrition Panel', icon: <Table2 className="w-3.5 h-3.5" />, action: 'nutrition' },
 ];
 
 export default function ToolsPanel() {
-  const { activeTool, setActiveTool } = useEditorStore();
+  const { activeTool, setActiveTool, setQrModalOpen } = useEditorStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handleSpecialTool(action: string) {
@@ -33,6 +34,8 @@ export default function ToolsPanel() {
       fileInputRef.current?.click();
     } else if (action === 'barcode') {
       (window as any).__lf_addBarcode?.();
+    } else if (action === 'qr') {
+      setQrModalOpen(true);
     } else if (action === 'nutrition') {
       (window as any).__lf_addNutritionPanel?.({});
     }

@@ -50,6 +50,7 @@ interface EditorState {
   // UI
   isExporting: boolean;
   preflightOpen: boolean;
+  qrModalOpen: boolean;
 }
 
 interface EditorActions {
@@ -73,6 +74,7 @@ interface EditorActions {
   setExportOptions: (opts: Partial<ExportOptions>) => void;
   setIsExporting: (v: boolean) => void;
   setPreflightOpen: (v: boolean) => void;
+  setQrModalOpen: (v: boolean) => void;
   acknowledgeInstruction: (id: string) => void;
 }
 
@@ -120,6 +122,7 @@ export const useEditorStore = create<EditorState & EditorActions>()(
     exportOptions: defaultExportOptions,
     isExporting: false,
     preflightOpen: false,
+    qrModalOpen: false,
 
     setTemplateAnalysis: (analysis) => set((s) => { s.templateAnalysis = analysis; }),
     setTemplateFile: (file) => set((s) => { s.templateFile = file; }),
@@ -149,6 +152,7 @@ export const useEditorStore = create<EditorState & EditorActions>()(
     setExportOptions: (opts) => set((s) => { Object.assign(s.exportOptions, opts); }),
     setIsExporting: (v) => set((s) => { s.isExporting = v; }),
     setPreflightOpen: (v) => set((s) => { s.preflightOpen = v; }),
+    setQrModalOpen: (v) => set((s) => { s.qrModalOpen = v; }),
     acknowledgeInstruction: (id) =>
       set((s) => {
         if (s.templateAnalysis) {

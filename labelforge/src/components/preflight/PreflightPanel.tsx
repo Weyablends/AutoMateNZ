@@ -2,34 +2,32 @@
 import { useState } from 'react';
 import {
   X, CheckCircle2, AlertTriangle, XCircle, Info,
-  ChevronDown, ChevronRight, Wrench, Download,
+  ChevronDown, ChevronRight, Wrench, Download, RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { mockPreflightItems } from '@/lib/mockData';
+import { runPreflight } from '@/lib/preflightEngine';
+import { useEditorStore } from '@/store/editorStore';
 import { cn } from '@/lib/utils';
-import type { PreflightStatus } from '@/lib/types';
+import type { PreflightItem, PreflightStatus } from '@/lib/types';
 
 function StatusIcon({ status }: { status: PreflightStatus }) {
   switch (status) {
-    case 'pass': return <CheckCircle2 className="w-4 h-4 text-forge-success shrink-0" />;
+    case 'pass':    return <CheckCircle2 className="w-4 h-4 text-forge-success shrink-0" />;
     case 'warning': return <AlertTriangle className="w-4 h-4 text-forge-warning shrink-0" />;
-    case 'fail': return <XCircle className="w-4 h-4 text-forge-error shrink-0" />;
-    case 'info': return <Info className="w-4 h-4 text-forge-info shrink-0" />;
+    case 'fail':    return <XCircle className="w-4 h-4 text-forge-error shrink-0" />;
+    case 'info':    return <Info className="w-4 h-4 text-forge-info shrink-0" />;
   }
 }
 
-const STATUS_LABELS: Record<PreflightStatus, string> = {
-  pass: 'Pass', warning: 'Warning', fail: 'Fail', info: 'Info',
-};
-
-function PreflightRow({ item }: { item: typeof mockPreflightItems[0] }) {
+function PreflightRow({ item }: { item: PreflightItem }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <div className={cn('border rounded-lg overflow-hidden', {
-      'border-forge-success/20 bg-forge-success-muted/20': item.status === 'pass',
-      'border-forge-warning/20 bg-forge-warning-muted/30': item.status === 'warning',
-      'border-forge-error/20 bg-forge-error-muted/30': item.status === 'fail',
-      'border-forge-accent/20 bg-forge-accent-muted/20': item.status === 'info',
+      'border-green-500/20 bg-green-500/5':   item.status === 'pass',
+      'border-yellow-500/20 bg-yellow-500/5': item.status === 'warning',
+      'border-red-500/20 bg-red-500/5':       item.status === 'fail',
+      'border-blue-500/20 bg-blue-500/5':     item.status === 'info',
     })}>
       <div className="flex items-start gap-3 p-3">
         <StatusIcon status={item.status} />
@@ -46,14 +44,19 @@ function PreflightRow({ item }: { item: typeof mockPreflightItems[0] }) {
           </Button>
         )}
         {item.detail && (
-          <button onClick={() => setExpanded(!expanded)} className="text-forge-dim hover:text-forge-muted p-0.5 shrink-0">
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="text-forge-dim hover:text-forge-muted p-0.5 shrink-0"
+          >
             {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
           </button>
         )}
       </div>
       {expanded && item.detail && (
         <div className="px-4 pb-3 pt-0">
-          <p className="text-xs text-forge-muted leading-relaxed bg-forge-panel rounded-lg p-2.5 border border-forge-border">{item.detail}</p>
+          <p className="text-xs text-forge-muted leading-relaxed bg-forge-panel rounded-lg p-2.5 border border-forge-border">
+            {item.detail}
+          </p>
         </div>
       )}
     </div>
@@ -63,18 +66,33 @@ function PreflightRow({ item }: { item: typeof mockPreflightItems[0] }) {
 interface Props {
   onClose: () => void;
   onExport: () => void;
+  fabricRef: React.MutableRefObject<any>;
 }
 
-export default function PreflightPanel({ onClose, onExport }: Props) {
-  const [filter, setFilter] = useState<PreflightStatus | 'all'>('all');
+export default function PreflightPanel({ onClose, onExport, fabricRef }: Props) {
+  const { templateAnalysis } = useEditorStore();
+  const [filter, setFilter] = useState('all' as PreflightStatus | 'all');
 
-  const items = filter === 'all' ? mockPreflightItems : mockPreflightItems.filter((i) => i.status === filter);
+  function computeItems(): PreflightItem[] {
+    const canvas = fabricRef.current;
+    if (!canvas || !templateAnalysis) return mockPreflightItems;
+    const acked = templateAnalysis.instructions.filter((i) => i.acknowledged).length;
+    return runPreflight(canvas, templateAnalysis, acked);
+  }
+
+  const [allItems, setAllItems] = useState(() => computeItems());
+
+  function refresh() {
+    setAllItems(computeItems());
+  }
+
+  const items = filter === 'all' ? allItems : allItems.filter((i) => i.status === filter);
 
   const counts = {
-    pass: mockPreflightItems.filter((i) => i.status === 'pass').length,
-    warning: mockPreflightItems.filter((i) => i.status === 'warning').length,
-    fail: mockPreflightItems.filter((i) => i.status === 'fail').length,
-    info: mockPreflightItems.filter((i) => i.status === 'info').length,
+    pass:    allItems.filter((i) => i.status === 'pass').length,
+    warning: allItems.filter((i) => i.status === 'warning').length,
+    fail:    allItems.filter((i) => i.status === 'fail').length,
+    info:    allItems.filter((i) => i.status === 'info').length,
   };
 
   const canExport = counts.fail === 0;
@@ -88,19 +106,29 @@ export default function PreflightPanel({ onClose, onExport }: Props) {
             <h2 className="text-sm font-semibold text-forge-text">Preflight Check</h2>
             <p className="text-xs text-forge-muted">Review all issues before exporting your print-ready file</p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-forge-panel text-forge-muted hover:text-forge-text transition-colors">
+          <button
+            onClick={refresh}
+            title="Re-run preflight"
+            className="p-1.5 rounded-lg hover:bg-forge-panel text-forge-muted hover:text-forge-text transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-forge-panel text-forge-muted hover:text-forge-text transition-colors"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Summary bar */}
-        <div className="flex gap-2 px-5 py-3 border-b border-forge-border bg-forge-panel/30 shrink-0">
+        <div className="flex gap-2 px-5 py-3 border-b border-forge-border bg-forge-panel/30 shrink-0 flex-wrap">
           {([
-            { status: 'pass', label: 'Pass', color: 'text-forge-success', icon: <CheckCircle2 className="w-3.5 h-3.5" /> },
-            { status: 'warning', label: 'Warning', color: 'text-forge-warning', icon: <AlertTriangle className="w-3.5 h-3.5" /> },
-            { status: 'fail', label: 'Fail', color: 'text-forge-error', icon: <XCircle className="w-3.5 h-3.5" /> },
-            { status: 'info', label: 'Info', color: 'text-forge-info', icon: <Info className="w-3.5 h-3.5" /> },
-          ] as const).map(({ status, label, color, icon }) => (
+            { status: 'pass' as const,    label: 'Pass',    color: 'text-forge-success', icon: <CheckCircle2 className="w-3.5 h-3.5" /> },
+            { status: 'warning' as const, label: 'Warning', color: 'text-forge-warning', icon: <AlertTriangle className="w-3.5 h-3.5" /> },
+            { status: 'fail' as const,    label: 'Fail',    color: 'text-forge-error',   icon: <XCircle className="w-3.5 h-3.5" /> },
+            { status: 'info' as const,    label: 'Info',    color: 'text-forge-info',    icon: <Info className="w-3.5 h-3.5" /> },
+          ]).map(({ status, label, color, icon }) => (
             <button
               key={status}
               onClick={() => setFilter(filter === status ? 'all' : status)}
@@ -123,18 +151,18 @@ export default function PreflightPanel({ onClose, onExport }: Props) {
                 : 'text-forge-muted border-forge-border hover:text-forge-text'
             )}
           >
-            All ({mockPreflightItems.length})
+            All ({allItems.length})
           </button>
         </div>
 
-        {/* Items list */}
+        {/* Items */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
           {items.map((item) => (
             <PreflightRow key={item.id} item={item} />
           ))}
         </div>
 
-        {/* Export footer */}
+        {/* Footer */}
         <div className="flex items-center gap-3 px-5 py-4 border-t border-forge-border bg-forge-panel/20 shrink-0">
           {canExport ? (
             <p className="text-xs text-forge-success flex items-center gap-1.5">
@@ -144,7 +172,7 @@ export default function PreflightPanel({ onClose, onExport }: Props) {
           ) : (
             <p className="text-xs text-forge-error flex items-center gap-1.5">
               <XCircle className="w-4 h-4" />
-              {counts.fail} critical error{counts.fail !== 1 ? 's' : ''} must be resolved before export
+              {counts.fail} critical error{counts.fail !== 1 ? 's' : ''} must be resolved
             </p>
           )}
           <div className="flex gap-2 ml-auto">

@@ -108,6 +108,9 @@ export type ObjectProperties = {
   fontSize?: number;
   fontFamily?: string;
   fontWeight?: string;
+  fontStyle?: string;
+  underline?: boolean;
+  textAlign?: string;
   text?: string;
   layer?: string;
 };

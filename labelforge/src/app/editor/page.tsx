@@ -5,8 +5,10 @@ import dynamic from 'next/dynamic';
 import TopBar from '@/components/editor/TopBar';
 import LeftSidebar from '@/components/editor/LeftSidebar';
 import RightSidebar from '@/components/editor/RightSidebar';
+import RulerOverlay from '@/components/editor/RulerOverlay';
 import PreflightPanel from '@/components/preflight/PreflightPanel';
 import ExportModal from '@/components/editor/ExportModal';
+import QRModal from '@/components/editor/QRModal';
 import { useEditorStore } from '@/store/editorStore';
 import { cn } from '@/lib/utils';
 
@@ -47,7 +49,7 @@ function StatusBar() {
 export default function EditorPage() {
   const router = useRouter();
   const fabricRef = useRef<any>(null);
-  const { templateAnalysis, preflightOpen, setPreflightOpen } = useEditorStore();
+  const { templateAnalysis, preflightOpen, setPreflightOpen, qrModalOpen, setQrModalOpen } = useEditorStore();
   const [exportOpen, setExportOpen] = useState(false);
 
   useEffect(() => {
@@ -68,6 +70,7 @@ export default function EditorPage() {
 
         {/* Canvas */}
         <div className="flex-1 overflow-hidden relative">
+          <RulerOverlay />
           <EditorCanvas fabricRef={fabricRef} />
 
           {/* Guide legend overlay */}
@@ -98,6 +101,7 @@ export default function EditorPage() {
         <PreflightPanel
           onClose={() => setPreflightOpen(false)}
           onExport={() => { setPreflightOpen(false); setExportOpen(true); }}
+          fabricRef={fabricRef}
         />
       )}
       {exportOpen && (
@@ -105,6 +109,9 @@ export default function EditorPage() {
           onClose={() => setExportOpen(false)}
           fabricRef={fabricRef}
         />
+      )}
+      {qrModalOpen && (
+        <QRModal onClose={() => setQrModalOpen(false)} />
       )}
     </div>
   );

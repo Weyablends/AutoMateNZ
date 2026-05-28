@@ -47,47 +47,12 @@ export default function ExportModal({ onClose, fabricRef }: Props) {
         link.click();
         URL.revokeObjectURL(url);
       } else {
-        // PDF export using jspdf
-        const { jsPDF } = await import('jspdf');
+        // Print-ready PDF via pdf-lib
+        const { exportPrintReadyPDF } = await import('@/lib/printExport');
         const dims = templateAnalysis?.dimensions ?? { width: 150, height: 210 };
-        const pageW = dims.width + (exportOptions.includeBleed ? 6 : 0);
-        const pageH = dims.height + (exportOptions.includeBleed ? 6 : 0);
-
-        const pdf = new jsPDF({
-          orientation: pageW > pageH ? 'landscape' : 'portrait',
-          unit: 'mm',
-          format: [pageW, pageH],
-        });
-
-        const dataUrl = canvas.toDataURL({
-          format: 'jpeg',
-          quality: 0.95,
-          multiplier: 2,
-        });
-
-        pdf.addImage(dataUrl, 'JPEG', 0, 0, pageW, pageH);
-
-        if (exportOptions.includeTrimMarks) {
-          const bleed = 3;
-          pdf.setDrawColor(0);
-          pdf.setLineWidth(0.25);
-          // Corner trim marks (simplified)
-          const tl = { x: bleed, y: bleed };
-          const tr = { x: pageW - bleed, y: bleed };
-          const bl = { x: bleed, y: pageH - bleed };
-          const br = { x: pageW - bleed, y: pageH - bleed };
-          [[tl.x - bleed, tl.y, tl.x - 1, tl.y],
-           [tl.x, tl.y - bleed, tl.x, tl.y - 1],
-           [tr.x + 1, tr.y, tr.x + bleed, tr.y],
-           [tr.x, tr.y - bleed, tr.x, tr.y - 1],
-           [bl.x - bleed, bl.y, bl.x - 1, bl.y],
-           [bl.x, bl.y + 1, bl.x, bl.y + bleed],
-           [br.x + 1, br.y, br.x + bleed, br.y],
-           [br.x, br.y + 1, br.x, br.y + bleed],
-          ].forEach(([x1, y1, x2, y2]) => pdf.line(x1, y1, x2, y2));
-        }
-
-        pdf.save(`${templateAnalysis?.fileName?.replace(/\.[^.]+$/, '') ?? 'label'}-print-ready.pdf`);
+        const bleed = templateAnalysis?.bleed ?? { top: 3, right: 3, bottom: 3, left: 3 };
+        const fileName = templateAnalysis?.fileName ?? 'label';
+        await exportPrintReadyPDF(canvas, exportOptions, dims, bleed, fileName);
       }
 
       setDone(true);
