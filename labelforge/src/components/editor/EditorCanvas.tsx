@@ -14,6 +14,7 @@ interface Props {
 
 export default function EditorCanvas({ fabricRef }: Props) {
   const canvasElRef = useRef<HTMLCanvasElement>(null);
+  const fabricModuleRef = useRef<any>(null);
   const historyRef = useRef<string[]>([]);
   const historyIdxRef = useRef(0);
   const isPanningRef = useRef(false);
@@ -165,6 +166,7 @@ export default function EditorCanvas({ fabricRef }: Props) {
     let clickCount = 0;
 
     import('fabric').then(({ fabric }) => {
+      fabricModuleRef.current = fabric;
       canvas = new fabric.Canvas(canvasElRef.current!, {
         width: canvasW, height: canvasH,
         backgroundColor: '#1C1C28',
@@ -546,8 +548,63 @@ export default function EditorCanvas({ fabricRef }: Props) {
     canvas.renderAll();
   }, [layers, fabricRef]);
 
+  function handleDragOver(e: React.DragEvent) {
+    if (e.dataTransfer.types.includes('application/labelforge-asset')) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    const raw = e.dataTransfer.getData('application/labelforge-asset');
+    if (!raw) return;
+    const canvas = fabricRef.current;
+    const fabric = fabricModuleRef.current;
+    if (!canvas || !fabric) return;
+
+    let asset: { type: string; svgContent?: string; dataUrl?: string; name: string };
+    try { asset = JSON.parse(raw); } catch { return; }
+
+    // Place at center of label area
+    const cx = labelOriginX + labelW / 2;
+    const cy = labelOriginY + labelH / 2;
+    const maxW = Math.min(mmToPx(80), labelW * 0.5);
+
+    if (asset.type === 'svg' && asset.svgContent) {
+      fabric.loadSVGFromString(asset.svgContent, (objects: any[], options: any) => {
+        const group = fabric.util.groupSVGElements(objects, options);
+        group.scaleToWidth(mmToPx(30));
+        group.set({
+          left: cx - (group.width ?? 0) * (group.scaleX ?? 1) / 2,
+          top: cy - (group.height ?? 0) * (group.scaleY ?? 1) / 2,
+          data: { id: `svg-${Date.now()}`, layer: 'artwork', name: asset.name },
+        });
+        canvas.add(group);
+        canvas.setActiveObject(group);
+        canvas.renderAll();
+      });
+    } else if (asset.type === 'image' && asset.dataUrl) {
+      fabric.Image.fromURL(asset.dataUrl, (img: any) => {
+        img.scaleToWidth(Math.min(maxW, img.width));
+        img.set({
+          left: cx - (img.width ?? 0) * (img.scaleX ?? 1) / 2,
+          top: cy - (img.height ?? 0) * (img.scaleY ?? 1) / 2,
+          data: { id: `img-${Date.now()}`, layer: 'images', name: asset.name },
+        });
+        canvas.add(img);
+        canvas.setActiveObject(img);
+        canvas.renderAll();
+      }, { crossOrigin: 'anonymous' });
+    }
+  }
+
   return (
-    <div className="w-full h-full flex items-center justify-center overflow-hidden bg-checker">
+    <div
+      className="w-full h-full flex items-center justify-center overflow-hidden bg-checker"
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       <div style={{ transform: `scale(${zoom})`, transformOrigin: 'center center', transition: 'transform 0.05s linear' }}>
         <canvas ref={canvasElRef} />
       </div>

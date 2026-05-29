@@ -158,3 +158,11 @@ export interface AssetItem {
   svgContent?: string;
   thumbnail: string;
 }
+
+export interface ExtractedAsset {
+  id: string;
+  name: string;
+  dataUrl: string;
+  width: number;
+  height: number;
+}

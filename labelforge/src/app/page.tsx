@@ -4,15 +4,18 @@ import { useRouter } from 'next/navigation';
 import { useDropzone } from 'react-dropzone';
 import {
   Upload, FileText, Layers, Zap, Shield, CheckCircle2, ArrowRight,
-  Scissors, Tag, Sparkles, Package,
+  Scissors, Tag, Sparkles, Package, Palette,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn, sleep, formatFileSize } from '@/lib/utils';
 import { useEditorStore } from '@/store/editorStore';
 import { mockTemplateAnalysis } from '@/lib/mockData';
 import { parseTemplateFile } from '@/lib/templateParser';
+import { extractDominantColors, extractImageAssets } from '@/lib/colorExtract';
+import type { BrandColor, ExtractedAsset } from '@/lib/types';
 
 type UploadStep = 'idle' | 'uploading' | 'analysing' | 'done';
+type DesignState = 'idle' | 'analyzing' | 'done';
 
 interface FileInfo {
   name: string;
@@ -29,11 +32,11 @@ const ACCEPTED_TEMPLATE: Record<string, string[]> = {
 };
 
 const ACCEPTED_DESIGN: Record<string, string[]> = {
-  'application/pdf': ['.pdf'],
-  'image/svg+xml': ['.svg'],
   'image/png': ['.png'],
   'image/jpeg': ['.jpg', '.jpeg'],
-  'application/postscript': ['.ai'],
+  'image/webp': ['.webp'],
+  'image/svg+xml': ['.svg'],
+  'application/pdf': ['.pdf'],
 };
 
 function AnalysisStep({ label, done, active }: { label: string; done: boolean; active: boolean }) {
@@ -60,12 +63,19 @@ function AnalysisStep({ label, done, active }: { label: string; done: boolean; a
 
 export default function UploadPage() {
   const router = useRouter();
-  const { setTemplateAnalysis, setTemplateFile, setDesignFile, setTemplateDataUrl } = useEditorStore();
+  const {
+    setTemplateAnalysis, setTemplateFile, setDesignFile, setTemplateDataUrl,
+    setReferenceImageUrl, setExtractedColors, setExtractedAssets,
+    extractedColors,
+  } = useEditorStore();
 
   const [templateFile, setTemplateFileLocal] = useState(null as FileInfo | null);
   const [designFile, setDesignFileLocal] = useState(null as FileInfo | null);
   const [step, setStep] = useState('idle' as UploadStep);
   const [analysisStep, setAnalysisStep] = useState(0);
+  const [designState, setDesignState] = useState<DesignState>('idle');
+  const [localExtractedColors, setLocalExtractedColors] = useState<string[]>([]);
+  const [extractedAssetCount, setExtractedAssetCount] = useState(0);
   const templateFileObjRef = useRef(null as File | null);
 
   const onTemplateDrop = useCallback((files: File[]) => {
@@ -73,7 +83,6 @@ export default function UploadPage() {
     if (!f) return;
     setTemplateFileLocal({ name: f.name, size: f.size, type: f.type });
     templateFileObjRef.current = f;
-    // Store data URL so the canvas can show the template as a reference layer
     if (f.type !== 'application/pdf' && f.type !== 'application/postscript') {
       const r = new FileReader();
       r.onload = (e) => setTemplateDataUrl((e.target?.result as string) ?? null);
@@ -83,8 +92,54 @@ export default function UploadPage() {
 
   const onDesignDrop = useCallback((files: File[]) => {
     const f = files[0];
-    if (f) setDesignFileLocal({ name: f.name, size: f.size, type: f.type });
-  }, []);
+    if (!f) return;
+    setDesignFileLocal({ name: f.name, size: f.size, type: f.type });
+    setDesignState('idle');
+    setLocalExtractedColors([]);
+    setExtractedAssetCount(0);
+
+    // Only analyze raster images
+    if (f.type.startsWith('image/') && f.type !== 'image/svg+xml') {
+      setDesignState('analyzing');
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const dataUrl = e.target?.result as string;
+        if (!dataUrl) { setDesignState('idle'); return; }
+
+        setReferenceImageUrl(dataUrl);
+
+        try {
+          const [colors, assets] = await Promise.all([
+            extractDominantColors(dataUrl, 6),
+            extractImageAssets(dataUrl),
+          ]);
+
+          const brandColors: BrandColor[] = colors.map((hex, i) => ({
+            id: `extracted-${i}`,
+            name: `Brand ${i + 1}`,
+            hex,
+          }));
+
+          const extractedAssets: ExtractedAsset[] = assets.map((a, i) => ({
+            id: `ref-asset-${i}`,
+            name: a.name,
+            dataUrl: a.dataUrl,
+            width: a.width,
+            height: a.height,
+          }));
+
+          setExtractedColors(brandColors);
+          setExtractedAssets(extractedAssets);
+          setLocalExtractedColors(colors);
+          setExtractedAssetCount(assets.length);
+          setDesignState('done');
+        } catch {
+          setDesignState('idle');
+        }
+      };
+      reader.readAsDataURL(f);
+    }
+  }, [setReferenceImageUrl, setExtractedColors, setExtractedAssets]);
 
   const templateDz = useDropzone({
     onDrop: onTemplateDrop,
@@ -242,13 +297,13 @@ export default function UploadPage() {
               </div>
             </div>
 
-            {/* Design upload */}
+            {/* Brand reference upload */}
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-2">
                 <div className="w-5 h-5 rounded bg-forge-accent/20 flex items-center justify-center">
-                  <Package className="w-3 h-3 text-forge-accent" />
+                  <Palette className="w-3 h-3 text-forge-accent" />
                 </div>
-                <span className="text-sm font-medium text-forge-text">Your Brand Design</span>
+                <span className="text-sm font-medium text-forge-text">Brand Reference Image</span>
                 <span className="text-forge-muted text-xs ml-auto">Optional</span>
               </div>
               <div
@@ -257,13 +312,50 @@ export default function UploadPage() {
                   'relative border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center gap-3 cursor-pointer transition-all min-h-[200px]',
                   designDz.isDragActive
                     ? 'border-forge-accent bg-forge-accent-muted/20'
+                    : designState === 'done'
+                    ? 'border-forge-success bg-forge-success/5'
+                    : designState === 'analyzing'
+                    ? 'border-forge-accent bg-forge-accent/5'
                     : designFile
                     ? 'border-forge-info bg-forge-accent-muted/20'
                     : 'border-forge-border hover:border-forge-accent/60 bg-forge-surface hover:bg-forge-panel'
                 )}
               >
                 <input {...designDz.getInputProps()} />
-                {designFile ? (
+                {designState === 'done' ? (
+                  <>
+                    <div className="w-12 h-12 rounded-xl bg-forge-success/20 flex items-center justify-center">
+                      <Sparkles className="w-6 h-6 text-forge-success" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-medium text-forge-text truncate max-w-[220px]">{designFile?.name}</p>
+                      <p className="text-xs text-forge-success mt-0.5">
+                        {localExtractedColors.length} colours · {extractedAssetCount} assets extracted
+                      </p>
+                    </div>
+                    {localExtractedColors.length > 0 && (
+                      <div className="flex gap-1.5">
+                        {localExtractedColors.map((hex, i) => (
+                          <div
+                            key={i}
+                            className="w-6 h-6 rounded-full border-2 border-forge-surface shadow-sm"
+                            style={{ background: hex }}
+                            title={hex}
+                          />
+                        ))}
+                      </div>
+                    )}
+                    <p className="text-xs text-forge-muted text-center">Ready · assets pre-loaded in editor</p>
+                  </>
+                ) : designState === 'analyzing' ? (
+                  <>
+                    <div className="w-12 h-12 rounded-xl bg-forge-accent/20 flex items-center justify-center animate-pulse">
+                      <Palette className="w-6 h-6 text-forge-accent" />
+                    </div>
+                    <p className="text-sm font-medium text-forge-accent">Analyzing image…</p>
+                    <p className="text-xs text-forge-muted">Extracting colours and assets</p>
+                  </>
+                ) : designFile ? (
                   <>
                     <div className="w-12 h-12 rounded-xl bg-forge-accent/20 flex items-center justify-center">
                       <CheckCircle2 className="w-6 h-6 text-forge-accent" />
@@ -280,14 +372,15 @@ export default function UploadPage() {
                       <Layers className="w-6 h-6 text-forge-muted" />
                     </div>
                     <div className="text-center">
-                      <p className="text-sm font-medium text-forge-text">Upload existing design</p>
-                      <p className="text-xs text-forge-muted mt-1">or start from scratch in the editor</p>
+                      <p className="text-sm font-medium text-forge-text">Drop your brand image here</p>
+                      <p className="text-xs text-forge-muted mt-1">We&apos;ll extract your colours and assets</p>
                     </div>
                     <div className="flex flex-wrap justify-center gap-1 mt-1">
-                      {['PDF', 'AI', 'SVG', 'PNG', 'JPG'].map((t) => (
+                      {['PNG', 'JPG', 'WEBP'].map((t) => (
                         <span key={t} className="px-1.5 py-0.5 rounded bg-forge-panel border border-forge-border text-forge-dim text-xs">{t}</span>
                       ))}
                     </div>
+                    <p className="text-2xs text-forge-dim text-center">Automatically extracts brand colours &amp; image assets</p>
                   </>
                 )}
               </div>
@@ -375,7 +468,7 @@ export default function UploadPage() {
               'Font embedding verification',
               'Manufacturer checklist',
               'PDF/X-4 export',
-              'Vector SVG support',
+              'Auto brand colour extraction',
               '300 DPI resolution check',
             ].map((f) => (
               <span key={f} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-forge-surface border border-forge-border text-xs text-forge-muted">

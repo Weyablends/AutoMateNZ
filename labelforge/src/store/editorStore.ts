@@ -8,6 +8,7 @@ import type {
   SidebarTab,
   BrandColor,
   ExportOptions,
+  ExtractedAsset,
 } from '@/lib/types';
 import { mockBrandColors } from '@/lib/mockData';
 
@@ -17,6 +18,11 @@ interface EditorState {
   templateFile: { name: string; type: string } | null;
   designFile: { name: string; type: string } | null;
   templateDataUrl: string | null;
+
+  // Reference image analysis
+  referenceImageUrl: string | null;
+  extractedColors: BrandColor[];
+  extractedAssets: ExtractedAsset[];
 
   // Tool
   activeTool: ToolMode;
@@ -60,6 +66,9 @@ interface EditorActions {
   setTemplateFile: (file: { name: string; type: string } | null) => void;
   setDesignFile: (file: { name: string; type: string } | null) => void;
   setTemplateDataUrl: (url: string | null) => void;
+  setReferenceImageUrl: (url: string | null) => void;
+  setExtractedColors: (colors: BrandColor[]) => void;
+  setExtractedAssets: (assets: ExtractedAsset[]) => void;
   setActiveTool: (tool: ToolMode) => void;
   setSidebarTab: (tab: SidebarTab) => void;
   setZoom: (zoom: number) => void;
@@ -102,6 +111,9 @@ export const useEditorStore = create<EditorState & EditorActions>()(
     templateFile: null,
     designFile: null,
     templateDataUrl: null,
+    referenceImageUrl: null,
+    extractedColors: [],
+    extractedAssets: [],
     activeTool: 'select',
     sidebarTab: 'tools',
     zoom: 1,
@@ -134,6 +146,9 @@ export const useEditorStore = create<EditorState & EditorActions>()(
     setTemplateFile: (file) => set((s) => { s.templateFile = file; }),
     setDesignFile: (file) => set((s) => { s.designFile = file; }),
     setTemplateDataUrl: (url) => set((s) => { s.templateDataUrl = url; }),
+    setReferenceImageUrl: (url) => set((s) => { s.referenceImageUrl = url; }),
+    setExtractedColors: (colors) => set((s) => { s.extractedColors = colors as any; }),
+    setExtractedAssets: (assets) => set((s) => { s.extractedAssets = assets as any; }),
     setActiveTool: (tool) => set((s) => { s.activeTool = tool; }),
     setSidebarTab: (tab) => set((s) => { s.sidebarTab = tab; }),
     setZoom: (zoom) => set((s) => { s.zoom = Math.min(5, Math.max(0.1, zoom)); }),
