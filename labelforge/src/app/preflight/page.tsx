@@ -25,7 +25,7 @@ const CATEGORY_ORDER = ['Dimensions', 'Bleed', 'Safe Zone', 'Colour', 'Typograph
 
 export default function PreflightPage() {
   const router = useRouter();
-  const { templateAnalysis, exportOptions, setExportOptions, isExporting, setPendingExport } = useEditorStore();
+  const { templateAnalysis, exportOptions, setExportOptions, isExporting, setPendingExport, setPreflightOpen } = useEditorStore();
   const [filterStatus, setFilterStatus] = useState('all' as PreflightStatus | 'all');
   const [expandedItem, setExpandedItem] = useState(null as string | null);
 
@@ -171,8 +171,13 @@ export default function PreflightPage() {
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           {item.fixable && (
-                            <Button variant="outline" size="xs" icon={<Wrench className="w-3 h-3" />}>
-                              Auto-fix
+                            <Button
+                              variant="outline"
+                              size="xs"
+                              icon={<Wrench className="w-3 h-3" />}
+                              onClick={() => { setPreflightOpen(true); router.push('/editor'); }}
+                            >
+                              Fix in Editor
                             </Button>
                           )}
                           {item.detail && (
