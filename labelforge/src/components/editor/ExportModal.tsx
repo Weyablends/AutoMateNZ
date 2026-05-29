@@ -21,9 +21,18 @@ export default function ExportModal({ onClose, fabricRef }: Props) {
     setIsExporting(true);
     setExportError('');
 
-    // Hide guides for export
+    const SCALE = 3.78;
+    const PADDING = 80;
+    const dims = templateAnalysis?.dimensions ?? { width: 150, height: 210 };
+    const bleed = templateAnalysis?.bleed ?? { top: 3, right: 3, bottom: 3, left: 3 };
+    const labelW = dims.width * SCALE;
+    const labelH = dims.height * SCALE;
+
+    // Hide guides and reset viewport so zoom/pan don't affect output
     const guides = canvas.getObjects().filter((o: any) => o.data?.type === 'guide' || o.data?.type === 'grid');
     guides.forEach((o: any) => o.set({ visible: false }));
+    const savedVpt = canvas.viewportTransform?.slice() ?? [1, 0, 0, 1, 0, 0];
+    canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
     canvas.renderAll();
 
     await sleep(200);
@@ -34,13 +43,18 @@ export default function ExportModal({ onClose, fabricRef }: Props) {
           format: exportOptions.format === 'jpg' ? 'jpeg' : 'png',
           quality: 0.95,
           multiplier: exportOptions.resolution / 72,
+          left: PADDING, top: PADDING, width: labelW, height: labelH,
         });
         const link = document.createElement('a');
         link.href = dataUrl;
         link.download = `label-export-${Date.now()}.${exportOptions.format}`;
         link.click();
       } else if (exportOptions.format === 'svg') {
-        const svg = canvas.toSVG();
+        const svg = canvas.toSVG({
+          viewBox: { x: PADDING, y: PADDING, width: labelW, height: labelH },
+          width: labelW,
+          height: labelH,
+        });
         const blob = new Blob([svg], { type: 'image/svg+xml' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -61,6 +75,7 @@ export default function ExportModal({ onClose, fabricRef }: Props) {
     } catch (err) {
       setExportError(err instanceof Error ? err.message : 'Export failed. Please try again.');
     } finally {
+      canvas.setViewportTransform(savedVpt);
       guides.forEach((o: any) => o.set({ visible: true }));
       canvas.renderAll();
       setIsExporting(false);

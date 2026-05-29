@@ -13,6 +13,8 @@ export async function exportPrintReadyPDF(
   bleed: Bleed,
   fileName = 'label'
 ): Promise<void> {
+  const SCALE = 3.78;
+  const PADDING = 80;
   const bl = options.includeBleed ? bleed : { top: 0, right: 0, bottom: 0, left: 0 };
   const MARK_LEN_MM = 5;
   const MARK_GAP_MM = 2;
@@ -23,14 +25,25 @@ export async function exportPrintReadyPDF(
   const pageW = pageWmm * MM_TO_PT;
   const pageH = pageHmm * MM_TO_PT;
 
-  // Hide guides, rasterize canvas, restore guides
+  // Hide guides, reset viewport, rasterize label area only, restore
   const guides = canvas.getObjects().filter((o: any) => o.data?.type === 'guide' || o.data?.type === 'grid');
   guides.forEach((o: any) => o.set({ visible: false }));
+  const savedVpt = canvas.viewportTransform?.slice() ?? [1, 0, 0, 1, 0, 0];
+  canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
   canvas.renderAll();
 
-  const dpiMul = options.resolution / 72;
-  const dataUrl = canvas.toDataURL({ format: 'png', quality: 1, multiplier: dpiMul });
+  const cropLeft = PADDING - bl.left * SCALE;
+  const cropTop  = PADDING - bl.top  * SCALE;
+  const cropW    = (bl.left + dims.width  + bl.right)  * SCALE;
+  const cropH    = (bl.top  + dims.height + bl.bottom) * SCALE;
 
+  const dpiMul = options.resolution / 72;
+  const dataUrl = canvas.toDataURL({
+    format: 'png', quality: 1, multiplier: dpiMul,
+    left: cropLeft, top: cropTop, width: cropW, height: cropH,
+  });
+
+  canvas.setViewportTransform(savedVpt);
   guides.forEach((o: any) => o.set({ visible: true }));
   canvas.renderAll();
 
