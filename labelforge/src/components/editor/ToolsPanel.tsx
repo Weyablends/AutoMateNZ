@@ -45,15 +45,13 @@ export default function ToolsPanel() {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      const dataUrl = ev.target?.result as string;
-      if (file.type === 'image/svg+xml') {
-        (window as any).__lf_addSVG?.(dataUrl, file.name);
-      } else {
-        (window as any).__lf_addImage?.(dataUrl, file.name);
-      }
-    };
-    reader.readAsDataURL(file);
+    if (file.type === 'image/svg+xml') {
+      reader.onload = (ev) => (window as any).__lf_addSVG?.(ev.target?.result as string, file.name);
+      reader.readAsText(file);
+    } else {
+      reader.onload = (ev) => (window as any).__lf_addImage?.(ev.target?.result as string, file.name);
+      reader.readAsDataURL(file);
+    }
     e.target.value = '';
   }
 

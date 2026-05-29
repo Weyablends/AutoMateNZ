@@ -16,6 +16,7 @@ interface EditorState {
   templateAnalysis: TemplateAnalysis | null;
   templateFile: { name: string; type: string } | null;
   designFile: { name: string; type: string } | null;
+  templateDataUrl: string | null;
 
   // Tool
   activeTool: ToolMode;
@@ -58,6 +59,7 @@ interface EditorActions {
   setTemplateAnalysis: (analysis: TemplateAnalysis) => void;
   setTemplateFile: (file: { name: string; type: string } | null) => void;
   setDesignFile: (file: { name: string; type: string } | null) => void;
+  setTemplateDataUrl: (url: string | null) => void;
   setActiveTool: (tool: ToolMode) => void;
   setSidebarTab: (tab: SidebarTab) => void;
   setZoom: (zoom: number) => void;
@@ -99,6 +101,7 @@ export const useEditorStore = create<EditorState & EditorActions>()(
     templateAnalysis: null,
     templateFile: null,
     designFile: null,
+    templateDataUrl: null,
     activeTool: 'select',
     sidebarTab: 'tools',
     zoom: 1,
@@ -130,6 +133,7 @@ export const useEditorStore = create<EditorState & EditorActions>()(
     setTemplateAnalysis: (analysis) => set((s) => { s.templateAnalysis = analysis; }),
     setTemplateFile: (file) => set((s) => { s.templateFile = file; }),
     setDesignFile: (file) => set((s) => { s.designFile = file; }),
+    setTemplateDataUrl: (url) => set((s) => { s.templateDataUrl = url; }),
     setActiveTool: (tool) => set((s) => { s.activeTool = tool; }),
     setSidebarTab: (tab) => set((s) => { s.sidebarTab = tab; }),
     setZoom: (zoom) => set((s) => { s.zoom = Math.min(5, Math.max(0.1, zoom)); }),

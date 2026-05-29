@@ -60,7 +60,7 @@ function AnalysisStep({ label, done, active }: { label: string; done: boolean; a
 
 export default function UploadPage() {
   const router = useRouter();
-  const { setTemplateAnalysis, setTemplateFile, setDesignFile } = useEditorStore();
+  const { setTemplateAnalysis, setTemplateFile, setDesignFile, setTemplateDataUrl } = useEditorStore();
 
   const [templateFile, setTemplateFileLocal] = useState(null as FileInfo | null);
   const [designFile, setDesignFileLocal] = useState(null as FileInfo | null);
@@ -70,11 +70,16 @@ export default function UploadPage() {
 
   const onTemplateDrop = useCallback((files: File[]) => {
     const f = files[0];
-    if (f) {
-      setTemplateFileLocal({ name: f.name, size: f.size, type: f.type });
-      templateFileObjRef.current = f;
+    if (!f) return;
+    setTemplateFileLocal({ name: f.name, size: f.size, type: f.type });
+    templateFileObjRef.current = f;
+    // Store data URL so the canvas can show the template as a reference layer
+    if (f.type !== 'application/pdf' && f.type !== 'application/postscript') {
+      const r = new FileReader();
+      r.onload = (e) => setTemplateDataUrl((e.target?.result as string) ?? null);
+      r.readAsDataURL(f);
     }
-  }, []);
+  }, [setTemplateDataUrl]);
 
   const onDesignDrop = useCallback((files: File[]) => {
     const f = files[0];

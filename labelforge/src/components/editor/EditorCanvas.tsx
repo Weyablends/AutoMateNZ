@@ -3,9 +3,8 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useEditorStore } from '@/store/editorStore';
 import type { ObjectProperties } from '@/lib/types';
 
-// Scale: 3.78px per mm
 const SCALE = 3.78;
-const PADDING = 80; // canvas padding around label
+const PADDING = 80;
 
 function mmToPx(mm: number) { return Math.round(mm * SCALE); }
 
@@ -57,7 +56,6 @@ export default function EditorCanvas({ fabricRef }: Props) {
     const guides: any[] = [];
     const commonProps = { selectable: false, evented: false, hoverCursor: 'default', excludeFromExport: true };
 
-    // Label background
     guides.push(new fabric.Rect({
       left: labelOriginX, top: labelOriginY,
       width: labelW, height: labelH,
@@ -65,7 +63,6 @@ export default function EditorCanvas({ fabricRef }: Props) {
       ...commonProps, data: { type: 'guide', layer: 'template' },
     }));
 
-    // Bleed area pattern fill
     guides.push(new fabric.Rect({
       left: labelOriginX - bleedL, top: labelOriginY - bleedT,
       width: labelW + bleedL + bleedR, height: labelH + bleedT + bleedB,
@@ -74,7 +71,6 @@ export default function EditorCanvas({ fabricRef }: Props) {
       ...commonProps, data: { type: 'guide', layer: 'bleed' },
     }));
 
-    // Trim line
     guides.push(new fabric.Rect({
       left: labelOriginX, top: labelOriginY,
       width: labelW, height: labelH,
@@ -83,7 +79,6 @@ export default function EditorCanvas({ fabricRef }: Props) {
       ...commonProps, data: { type: 'guide', layer: 'dieline' },
     }));
 
-    // Safe zone
     if (showGuides) {
       guides.push(new fabric.Rect({
         left: labelOriginX + safeL, top: labelOriginY + safeT,
@@ -94,14 +89,12 @@ export default function EditorCanvas({ fabricRef }: Props) {
       }));
     }
 
-    // Bleed corner labels
     const labelStyle = { fontSize: 8, fill: '#FF6B35', fontFamily: 'JetBrains Mono, monospace', selectable: false, evented: false };
     guides.push(new fabric.Text(`BLEED ${bleed.top}mm`, {
       left: labelOriginX - bleedL + 2, top: labelOriginY - bleedT - 10,
       ...labelStyle, data: { type: 'guide' },
     }));
 
-    // Grid
     if (showGrid) {
       const gridSize = mmToPx(5);
       for (let x = labelOriginX; x <= labelOriginX + labelW; x += gridSize) {
@@ -116,7 +109,6 @@ export default function EditorCanvas({ fabricRef }: Props) {
       }
     }
 
-    // Barcode zone indicator (from mock template)
     guides.push(new fabric.Rect({
       left: labelOriginX + labelW - mmToPx(44), top: labelOriginY + labelH - mmToPx(36),
       width: mmToPx(40), height: mmToPx(28),
@@ -130,7 +122,6 @@ export default function EditorCanvas({ fabricRef }: Props) {
       selectable: false, evented: false, data: { type: 'guide' },
     }));
 
-    // Silver foil zone indicator
     guides.push(new fabric.Rect({
       left: labelOriginX, top: labelOriginY,
       width: labelW, height: mmToPx(35),
@@ -161,8 +152,10 @@ export default function EditorCanvas({ fabricRef }: Props) {
     underline: obj.underline,
     textAlign: obj.textAlign,
     text: obj.text,
+    layer: obj.data?.layer,
   });
 
+  // Main canvas init — runs once per canvas size change
   useEffect(() => {
     if (!canvasElRef.current) return;
     let canvas: any;
@@ -181,11 +174,142 @@ export default function EditorCanvas({ fabricRef }: Props) {
 
       fabricRef.current = canvas;
 
-      // Add guides
+      // Build guides
       buildGuides(fabric, canvas);
+
+      // Load uploaded template as a semi-transparent reference layer
+      const tdUrl = useEditorStore.getState().templateDataUrl;
+      if (tdUrl) {
+        fabric.Image.fromURL(tdUrl, (img: any) => {
+          if (!img || !img.width || !img.height) return;
+          img.set({
+            left: labelOriginX,
+            top: labelOriginY,
+            scaleX: labelW / img.width,
+            scaleY: labelH / img.height,
+            selectable: false,
+            evented: false,
+            opacity: 0.35,
+            hoverCursor: 'default',
+            data: { type: 'guide', layer: 'template', name: 'Dieline Reference' },
+          });
+          canvas.add(img);
+          // Keep guides (trim, bleed, safe) on top of the template image
+          canvas.getObjects()
+            .filter((o: any) => o.data?.type === 'guide' && o.type !== 'image')
+            .forEach((o: any) => canvas.bringToFront(o));
+          canvas.renderAll();
+        }, { crossOrigin: 'anonymous' });
+      }
 
       // Initial history snapshot
       saveHistory(canvas);
+
+      // ── Canvas operation globals ────────────────────────────────────────────
+      // These MUST be set here (after canvas is ready) — a separate useEffect
+      // would run before the async fabric import resolves and would miss canvas.
+      (window as any).__lf_addImage = (dataUrl: string, name: string) => {
+        fabric.Image.fromURL(dataUrl, (img: any) => {
+          img.scaleToWidth(mmToPx(60));
+          img.set({ left: labelOriginX + 20, top: labelOriginY + 20, data: { id: `img-${Date.now()}`, layer: 'images', name } });
+          canvas.add(img);
+          canvas.setActiveObject(img);
+          canvas.renderAll();
+          saveHistory(canvas);
+        });
+      };
+
+      (window as any).__lf_addSVG = (svgString: string, name: string) => {
+        fabric.loadSVGFromString(svgString, (objects: any[], options: any) => {
+          const group = fabric.util.groupSVGElements(objects, options);
+          group.scaleToWidth(mmToPx(30));
+          group.set({ left: labelOriginX + 20, top: labelOriginY + 60, data: { id: `svg-${Date.now()}`, layer: 'artwork', name } });
+          canvas.add(group);
+          canvas.setActiveObject(group);
+          canvas.renderAll();
+          saveHistory(canvas);
+        });
+      };
+
+      (window as any).__lf_addBarcode = () => {
+        const barcodeObjs: any[] = [];
+        const barW = mmToPx(40);
+        const barH = mmToPx(25);
+        const bcX = labelOriginX + labelW - mmToPx(44);
+        const bcY = labelOriginY + labelH - mmToPx(38);
+        barcodeObjs.push(new fabric.Rect({ left: 0, top: 0, width: barW + mmToPx(10), height: barH + mmToPx(8), fill: 'white', rx: 2, ry: 2 }));
+        let x = mmToPx(5);
+        [3,1,2,1,1,4,1,2,1,1,3,2,1,1,2,4,1,1,2,1,3,1,2,1,1].forEach((w, i) => {
+          if (i % 2 === 0) barcodeObjs.push(new fabric.Rect({ left: x, top: mmToPx(2), width: w * 1.5, height: barH - mmToPx(4), fill: '#000000' }));
+          x += w * 1.5 + 1.5;
+        });
+        barcodeObjs.push(new fabric.Text('4 012345 678901', { left: mmToPx(5), top: barH - mmToPx(1), fontSize: 8, fontFamily: 'JetBrains Mono, monospace', fill: '#000000' }));
+        const group = new fabric.Group(barcodeObjs, { left: bcX, top: bcY, data: { id: `barcode-${Date.now()}`, layer: 'barcode', name: 'EAN-13 Barcode' } });
+        canvas.add(group);
+        canvas.setActiveObject(group);
+        canvas.renderAll();
+        saveHistory(canvas);
+      };
+
+      (window as any).__lf_addQRCode = (dataUrl: string, sizeMm: number) => {
+        fabric.Image.fromURL(dataUrl, (img: any) => {
+          img.scaleToWidth(mmToPx(sizeMm));
+          img.set({ left: labelOriginX + 20, top: labelOriginY + 20, data: { id: `qr-${Date.now()}`, layer: 'barcode', name: 'QR Code' } });
+          canvas.add(img);
+          canvas.setActiveObject(img);
+          canvas.renderAll();
+          saveHistory(canvas);
+        });
+      };
+
+      (window as any).__lf_addNutritionPanel = (_data: any) => {
+        const lines = [
+          { text: 'NUTRITION INFORMATION', bold: true, size: 10 },
+          { text: 'Serving size: 250 mL', bold: false, size: 8 },
+          { text: '─────────────────────', bold: false, size: 7 },
+          { text: 'Energy         420 kJ / 100 kcal', bold: false, size: 7.5 },
+          { text: 'Protein        0.2 g', bold: false, size: 7.5 },
+          { text: 'Fat, total     0.0 g', bold: false, size: 7.5 },
+          { text: '  – saturated  0.0 g', bold: false, size: 7.5 },
+          { text: 'Carbohydrate   24 g', bold: false, size: 7.5 },
+          { text: '  – sugars     22 g', bold: false, size: 7.5 },
+          { text: 'Sodium         18 mg', bold: false, size: 7.5 },
+          { text: '─────────────────────', bold: false, size: 7 },
+        ];
+        const fabricLines: any[] = [];
+        let y = 0;
+        lines.forEach((l) => {
+          const t = new fabric.Text(l.text, { left: 0, top: y, fontSize: l.size, fontFamily: 'JetBrains Mono, monospace', fontWeight: l.bold ? 'bold' : 'normal', fill: '#000000' });
+          fabricLines.push(t);
+          y += l.size + 2;
+        });
+        const group = new fabric.Group(fabricLines, { left: labelOriginX + 10, top: labelOriginY + labelH * 0.5, data: { id: `nutrition-${Date.now()}`, layer: 'text', name: 'Nutrition Panel' } });
+        canvas.add(group);
+        canvas.setActiveObject(group);
+        canvas.renderAll();
+        saveHistory(canvas);
+      };
+
+      (window as any).__lf_setFill = (hex: string) => {
+        const obj = canvas.getActiveObject();
+        if (!obj) return;
+        obj.set({ fill: hex });
+        canvas.renderAll();
+        saveHistory(canvas);
+        useEditorStore.getState().setSelectedObject(obj.data?.id || 'obj', {
+          id: obj.data?.id || 'obj',
+          type: obj.type === 'i-text' || obj.type === 'text' ? 'text' : obj.type,
+          x: Math.round(obj.left ?? 0), y: Math.round(obj.top ?? 0),
+          width: Math.round((obj.width ?? 0) * (obj.scaleX ?? 1)),
+          height: Math.round((obj.height ?? 0) * (obj.scaleY ?? 1)),
+          rotation: Math.round(obj.angle ?? 0),
+          opacity: Math.round((obj.opacity ?? 1) * 100) / 100,
+          fill: hex,
+          stroke: typeof obj.stroke === 'string' ? obj.stroke : 'transparent',
+          strokeWidth: obj.strokeWidth ?? 0,
+        });
+      };
+      // ───────────────────────────────────────────────────────────────────────
 
       // Object selection
       canvas.on('selection:created', (e: any) => {
@@ -196,12 +320,10 @@ export default function EditorCanvas({ fabricRef }: Props) {
         const obj = e.selected?.[0];
         if (obj) setSelectedObject(obj.data?.id || 'obj', objectToProps(obj));
       });
-      canvas.on('selection:cleared', () => {
-        setSelectedObject(null, null);
-      });
+      canvas.on('selection:cleared', () => setSelectedObject(null, null));
       canvas.on('object:modified', () => saveHistory(canvas));
 
-      // Pen tool: path created after free drawing
+      // Pen tool: tag created path and return to select
       canvas.on('path:created', (e: any) => {
         const path = e.path;
         if (path) {
@@ -240,10 +362,8 @@ export default function EditorCanvas({ fabricRef }: Props) {
           isDrawingShape = true;
           shapeStart = { x: pointer.x, y: pointer.y };
           activeShape = new fabric.Rect({
-            left: pointer.x, top: pointer.y,
-            width: 0, height: 0,
-            fill: 'rgba(91,127,255,0.2)',
-            stroke: '#5B7FFF', strokeWidth: 1.5,
+            left: pointer.x, top: pointer.y, width: 0, height: 0,
+            fill: 'rgba(91,127,255,0.2)', stroke: '#5B7FFF', strokeWidth: 1.5,
             data: { id: `rect-${Date.now()}`, layer: 'artwork' },
           });
           canvas.add(activeShape);
@@ -254,10 +374,8 @@ export default function EditorCanvas({ fabricRef }: Props) {
           isDrawingShape = true;
           shapeStart = { x: pointer.x, y: pointer.y };
           activeShape = new fabric.Ellipse({
-            left: pointer.x, top: pointer.y,
-            rx: 0, ry: 0,
-            fill: 'rgba(91,127,255,0.2)',
-            stroke: '#5B7FFF', strokeWidth: 1.5,
+            left: pointer.x, top: pointer.y, rx: 0, ry: 0,
+            fill: 'rgba(91,127,255,0.2)', stroke: '#5B7FFF', strokeWidth: 1.5,
             data: { id: `ellipse-${Date.now()}`, layer: 'artwork' },
           });
           canvas.add(activeShape);
@@ -268,8 +386,7 @@ export default function EditorCanvas({ fabricRef }: Props) {
           if (clickCount === 1) {
             const text = new fabric.IText('Double-click to edit', {
               left: pointer.x, top: pointer.y,
-              fontSize: 20, fill: '#1C1C1C',
-              fontFamily: 'Inter, sans-serif',
+              fontSize: 20, fill: '#1C1C1C', fontFamily: 'Inter, sans-serif',
               data: { id: `text-${Date.now()}`, layer: 'text' },
             });
             canvas.add(text);
@@ -282,7 +399,6 @@ export default function EditorCanvas({ fabricRef }: Props) {
 
       canvas.on('mouse:move', (opt: any) => {
         const { e, pointer } = opt;
-
         if (isPanningRef.current) {
           const vpt = canvas.viewportTransform.slice();
           vpt[4] += e.clientX - lastPanRef.current.x;
@@ -291,23 +407,13 @@ export default function EditorCanvas({ fabricRef }: Props) {
           lastPanRef.current = { x: e.clientX, y: e.clientY };
           return;
         }
-
         if (!isDrawingShape || !activeShape) return;
         const dx = pointer.x - shapeStart.x;
         const dy = pointer.y - shapeStart.y;
-
         if (activeShape.type === 'rect') {
-          activeShape.set({
-            left: dx < 0 ? pointer.x : shapeStart.x,
-            top: dy < 0 ? pointer.y : shapeStart.y,
-            width: Math.abs(dx), height: Math.abs(dy),
-          });
+          activeShape.set({ left: dx < 0 ? pointer.x : shapeStart.x, top: dy < 0 ? pointer.y : shapeStart.y, width: Math.abs(dx), height: Math.abs(dy) });
         } else if (activeShape.type === 'ellipse') {
-          activeShape.set({
-            left: dx < 0 ? pointer.x : shapeStart.x,
-            top: dy < 0 ? pointer.y : shapeStart.y,
-            rx: Math.abs(dx) / 2, ry: Math.abs(dy) / 2,
-          });
+          activeShape.set({ left: dx < 0 ? pointer.x : shapeStart.x, top: dy < 0 ? pointer.y : shapeStart.y, rx: Math.abs(dx) / 2, ry: Math.abs(dy) / 2 });
         }
         canvas.renderAll();
       });
@@ -343,14 +449,12 @@ export default function EditorCanvas({ fabricRef }: Props) {
         if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
           e.preventDefault();
           if (e.shiftKey) {
-            // Redo
             if (historyIdxRef.current < historyRef.current.length - 1) {
               historyIdxRef.current++;
               canvas.loadFromJSON(historyRef.current[historyIdxRef.current], () => canvas.renderAll());
               setHistoryState(historyIdxRef.current, historyRef.current.length);
             }
           } else {
-            // Undo
             if (historyIdxRef.current > 0) {
               historyIdxRef.current--;
               canvas.loadFromJSON(historyRef.current[historyIdxRef.current], () => canvas.renderAll());
@@ -395,7 +499,7 @@ export default function EditorCanvas({ fabricRef }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showGrid, showGuides]);
 
-  // Sync tool cursor
+  // Sync tool cursor and drawing mode
   useEffect(() => {
     const canvas = fabricRef.current;
     if (!canvas) return;
@@ -429,140 +533,6 @@ export default function EditorCanvas({ fabricRef }: Props) {
     canvas.renderAll();
   }, [activeTool, fabricRef]);
 
-  // Expose addImage method
-  useEffect(() => {
-    const canvas = fabricRef.current;
-    if (!canvas) return;
-    (window as any).__lf_addImage = (dataUrl: string, name: string) => {
-      import('fabric').then(({ fabric }) => {
-        fabric.Image.fromURL(dataUrl, (img: any) => {
-          img.scaleToWidth(mmToPx(60));
-          img.set({ left: labelOriginX + 20, top: labelOriginY + 20, data: { id: `img-${Date.now()}`, layer: 'images', name } });
-          canvas.add(img);
-          canvas.setActiveObject(img);
-          canvas.renderAll();
-          saveHistory(canvas);
-        });
-      });
-    };
-    (window as any).__lf_addSVG = (svgString: string, name: string) => {
-      import('fabric').then(({ fabric }) => {
-        fabric.loadSVGFromString(svgString, (objects: any[], options: any) => {
-          const group = fabric.util.groupSVGElements(objects, options);
-          group.scaleToWidth(mmToPx(30));
-          group.set({ left: labelOriginX + 20, top: labelOriginY + 60, data: { id: `svg-${Date.now()}`, layer: 'artwork', name } });
-          canvas.add(group);
-          canvas.setActiveObject(group);
-          canvas.renderAll();
-          saveHistory(canvas);
-        });
-      });
-    };
-    (window as any).__lf_addBarcode = () => {
-      import('fabric').then(({ fabric }) => {
-        const barcodeGroup = [];
-        // Barcode bars
-        const barW = mmToPx(40);
-        const barH = mmToPx(25);
-        const barcodeOriginX = labelOriginX + labelW - mmToPx(44);
-        const barcodeOriginY = labelOriginY + labelH - mmToPx(38);
-
-        // White background
-        barcodeGroup.push(new fabric.Rect({ left: 0, top: 0, width: barW + mmToPx(10), height: barH + mmToPx(8), fill: 'white', rx: 2, ry: 2 }));
-        // Generate fake barcode bars
-        let x = mmToPx(5);
-        const barPattern = [3,1,2,1,1,4,1,2,1,1,3,2,1,1,2,4,1,1,2,1,3,1,2,1,1];
-        barPattern.forEach((w, i) => {
-          if (i % 2 === 0) {
-            barcodeGroup.push(new fabric.Rect({ left: x, top: mmToPx(2), width: w * 1.5, height: barH - mmToPx(4), fill: '#000000' }));
-          }
-          x += w * 1.5 + 1.5;
-        });
-        barcodeGroup.push(new fabric.Text('4 012345 678901', { left: mmToPx(5), top: barH - mmToPx(1), fontSize: 8, fontFamily: 'JetBrains Mono, monospace', fill: '#000000' }));
-
-        const group = new fabric.Group(barcodeGroup, {
-          left: barcodeOriginX, top: barcodeOriginY,
-          data: { id: `barcode-${Date.now()}`, layer: 'barcode', name: 'EAN-13 Barcode' },
-        });
-        canvas.add(group);
-        canvas.setActiveObject(group);
-        canvas.renderAll();
-        saveHistory(canvas);
-      });
-    };
-    (window as any).__lf_addQRCode = (dataUrl: string, sizeMm: number) => {
-      import('fabric').then(({ fabric }) => {
-        fabric.Image.fromURL(dataUrl, (img: any) => {
-          img.scaleToWidth(mmToPx(sizeMm));
-          img.set({ left: labelOriginX + 20, top: labelOriginY + 20, data: { id: `qr-${Date.now()}`, layer: 'barcode', name: 'QR Code' } });
-          canvas.add(img);
-          canvas.setActiveObject(img);
-          canvas.renderAll();
-          saveHistory(canvas);
-        });
-      });
-    };
-    (window as any).__lf_addNutritionPanel = (data: any) => {
-      import('fabric').then(({ fabric }) => {
-        const lines = [
-          { text: 'NUTRITION INFORMATION', bold: true, size: 10 },
-          { text: 'Serving size: 250 mL', bold: false, size: 8 },
-          { text: '─────────────────────', bold: false, size: 7 },
-          { text: 'Energy         420 kJ / 100 kcal', bold: false, size: 7.5 },
-          { text: 'Protein        0.2 g', bold: false, size: 7.5 },
-          { text: 'Fat, total     0.0 g', bold: false, size: 7.5 },
-          { text: '  – saturated  0.0 g', bold: false, size: 7.5 },
-          { text: 'Carbohydrate   24 g', bold: false, size: 7.5 },
-          { text: '  – sugars     22 g', bold: false, size: 7.5 },
-          { text: 'Sodium         18 mg', bold: false, size: 7.5 },
-          { text: '─────────────────────', bold: false, size: 7 },
-        ];
-        const fabricLines: any[] = [];
-        let y = 0;
-        lines.forEach((l) => {
-          const t = new fabric.Text(l.text, {
-            left: 0, top: y,
-            fontSize: l.size, fontFamily: 'JetBrains Mono, monospace',
-            fontWeight: l.bold ? 'bold' : 'normal',
-            fill: '#000000',
-          });
-          fabricLines.push(t);
-          y += l.size + 2;
-        });
-        const group = new fabric.Group(fabricLines, {
-          left: labelOriginX + 10, top: labelOriginY + labelH * 0.5,
-          data: { id: `nutrition-${Date.now()}`, layer: 'text', name: 'Nutrition Panel' },
-        });
-        canvas.add(group);
-        canvas.setActiveObject(group);
-        canvas.renderAll();
-        saveHistory(canvas);
-      });
-    };
-    (window as any).__lf_setFill = (hex: string) => {
-      const obj = canvas.getActiveObject();
-      if (!obj) return;
-      obj.set({ fill: hex });
-      canvas.renderAll();
-      saveHistory(canvas);
-      useEditorStore.getState().setSelectedObject(
-        obj.data?.id || 'obj',
-        {
-          id: obj.data?.id || 'obj',
-          type: obj.type === 'i-text' || obj.type === 'text' ? 'text' : obj.type,
-          x: Math.round(obj.left ?? 0), y: Math.round(obj.top ?? 0),
-          width: Math.round((obj.width ?? 0) * (obj.scaleX ?? 1)),
-          height: Math.round((obj.height ?? 0) * (obj.scaleY ?? 1)),
-          rotation: Math.round(obj.angle ?? 0),
-          opacity: Math.round((obj.opacity ?? 1) * 100) / 100,
-          fill: hex,
-          stroke: typeof obj.stroke === 'string' ? obj.stroke : 'transparent',
-          strokeWidth: obj.strokeWidth ?? 0,
-        },
-      );
-    };
-  }, [fabricRef, labelOriginX, labelOriginY, labelW, labelH, saveHistory]);
-
   // Sync layer visibility
   useEffect(() => {
     const canvas = fabricRef.current;
@@ -571,9 +541,7 @@ export default function EditorCanvas({ fabricRef }: Props) {
       if (!obj.data?.layer) return;
       const layerId = `layer-${obj.data.layer}`;
       const layer = layers.find((l) => l.id === layerId);
-      if (layer) {
-        obj.set({ visible: layer.visible, selectable: layer.visible && !layer.locked });
-      }
+      if (layer) obj.set({ visible: layer.visible, selectable: layer.visible && !layer.locked });
     });
     canvas.renderAll();
   }, [layers, fabricRef]);
