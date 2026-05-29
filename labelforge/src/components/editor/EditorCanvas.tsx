@@ -539,6 +539,28 @@ export default function EditorCanvas({ fabricRef }: Props) {
         saveHistory(canvas);
       });
     };
+    (window as any).__lf_setFill = (hex: string) => {
+      const obj = canvas.getActiveObject();
+      if (!obj) return;
+      obj.set({ fill: hex });
+      canvas.renderAll();
+      saveHistory(canvas);
+      useEditorStore.getState().setSelectedObject(
+        obj.data?.id || 'obj',
+        {
+          id: obj.data?.id || 'obj',
+          type: obj.type === 'i-text' || obj.type === 'text' ? 'text' : obj.type,
+          x: Math.round(obj.left ?? 0), y: Math.round(obj.top ?? 0),
+          width: Math.round((obj.width ?? 0) * (obj.scaleX ?? 1)),
+          height: Math.round((obj.height ?? 0) * (obj.scaleY ?? 1)),
+          rotation: Math.round(obj.angle ?? 0),
+          opacity: Math.round((obj.opacity ?? 1) * 100) / 100,
+          fill: hex,
+          stroke: typeof obj.stroke === 'string' ? obj.stroke : 'transparent',
+          strokeWidth: obj.strokeWidth ?? 0,
+        },
+      );
+    };
   }, [fabricRef, labelOriginX, labelOriginY, labelW, labelH, saveHistory]);
 
   // Sync layer visibility

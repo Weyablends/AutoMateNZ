@@ -88,8 +88,9 @@ export default function AssetsPanel() {
           {mockBrandColors.map((color) => (
             <button
               key={color.id}
+              onClick={() => (window as any).__lf_setFill?.(color.hex)}
               className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-forge-panel transition-all"
-              title={color.pantone || color.hex}
+              title={`Apply ${color.name} to selected object`}
             >
               <div className="w-5 h-5 rounded border border-forge-border shrink-0" style={{ background: color.hex }} />
               <div className="flex-1 min-w-0 text-left">

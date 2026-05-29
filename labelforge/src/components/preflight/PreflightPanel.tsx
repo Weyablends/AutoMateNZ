@@ -11,6 +11,9 @@ import { useEditorStore } from '@/store/editorStore';
 import { cn } from '@/lib/utils';
 import type { PreflightItem, PreflightStatus } from '@/lib/types';
 
+const MM_TO_PX = 3.78;
+const PADDING = 80;
+
 function StatusIcon({ status }: { status: PreflightStatus }) {
   switch (status) {
     case 'pass':    return <CheckCircle2 className="w-4 h-4 text-forge-success shrink-0" />;
@@ -20,7 +23,7 @@ function StatusIcon({ status }: { status: PreflightStatus }) {
   }
 }
 
-function PreflightRow({ item }: { item: PreflightItem }) {
+function PreflightRow({ item, onFix }: { item: PreflightItem; onFix?: (id: string) => void }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <div className={cn('border rounded-lg overflow-hidden', {
@@ -38,8 +41,14 @@ function PreflightRow({ item }: { item: PreflightItem }) {
           </div>
           <p className="text-xs text-forge-muted mt-0.5">{item.message}</p>
         </div>
-        {item.fixable && (
-          <Button variant="outline" size="xs" icon={<Wrench className="w-3 h-3" />} className="shrink-0">
+        {item.fixable && onFix && (
+          <Button
+            variant="outline"
+            size="xs"
+            icon={<Wrench className="w-3 h-3" />}
+            onClick={() => onFix(item.id)}
+            className="shrink-0"
+          >
             Fix
           </Button>
         )}
@@ -70,7 +79,7 @@ interface Props {
 }
 
 export default function PreflightPanel({ onClose, onExport, fabricRef }: Props) {
-  const { templateAnalysis } = useEditorStore();
+  const { templateAnalysis, setExportOptions } = useEditorStore();
   const [filter, setFilter] = useState('all' as PreflightStatus | 'all');
 
   function computeItems(): PreflightItem[] {
@@ -84,6 +93,136 @@ export default function PreflightPanel({ onClose, onExport, fabricRef }: Props) 
 
   function refresh() {
     setAllItems(computeItems());
+  }
+
+  async function applyFix(itemId: string) {
+    const canvas = fabricRef.current;
+    if (!canvas || !templateAnalysis) return;
+
+    const dims = templateAnalysis.dimensions;
+    const bleed = templateAnalysis.bleed;
+    const safe = templateAnalysis.safeZone;
+    const labelX = PADDING;
+    const labelY = PADDING;
+    const labelW = dims.width * MM_TO_PX;
+    const labelH = dims.height * MM_TO_PX;
+    const safeX = labelX + safe.left * MM_TO_PX;
+    const safeY = labelY + safe.top * MM_TO_PX;
+    const safeW = labelW - (safe.left + safe.right) * MM_TO_PX;
+    const safeH = labelH - (safe.top + safe.bottom) * MM_TO_PX;
+
+    const artObjects = canvas.getObjects().filter((o: any) => o.data?.type !== 'guide' && o.data?.type !== 'grid');
+
+    switch (itemId) {
+      case 'pf-bleed-art': {
+        const { fabric } = await import('fabric');
+        const bg = new fabric.Rect({
+          left: labelX - bleed.left * MM_TO_PX,
+          top: labelY - bleed.top * MM_TO_PX,
+          width: labelW + (bleed.left + bleed.right) * MM_TO_PX,
+          height: labelH + (bleed.top + bleed.bottom) * MM_TO_PX,
+          fill: '#FFFFFF',
+          data: { id: `bg-bleed-${Date.now()}`, layer: 'artwork' },
+        });
+        canvas.add(bg);
+        canvas.sendToBack(bg);
+        canvas.getObjects()
+          .filter((o: any) => o.data?.type === 'guide' || o.data?.type === 'grid')
+          .forEach((o: any) => canvas.sendToBack(o));
+        canvas.renderAll();
+        break;
+      }
+
+      case 'pf-safe-text': {
+        const textObjs = artObjects.filter((o: any) => o.type === 'text' || o.type === 'i-text');
+        textObjs.forEach((o: any) => {
+          const b = o.getBoundingRect(true);
+          let newLeft = o.left ?? 0;
+          let newTop = o.top ?? 0;
+          if (b.left < safeX) newLeft += safeX - b.left + 2;
+          if (b.top < safeY) newTop += safeY - b.top + 2;
+          if (b.left + b.width > safeX + safeW) newLeft -= (b.left + b.width) - (safeX + safeW) + 2;
+          if (b.top + b.height > safeY + safeH) newTop -= (b.top + b.height) - (safeY + safeH) + 2;
+          o.set({ left: newLeft, top: newTop });
+        });
+        canvas.renderAll();
+        break;
+      }
+
+      case 'pf-safe-img': {
+        const imgObjs = artObjects.filter((o: any) => o.type === 'image' || (o.type === 'group' && o.data?.name !== 'EAN-13 Barcode'));
+        imgObjs.forEach((o: any) => {
+          const b = o.getBoundingRect(true);
+          let newLeft = o.left ?? 0;
+          let newTop = o.top ?? 0;
+          if (b.left < safeX) newLeft += safeX - b.left + 2;
+          if (b.top < safeY) newTop += safeY - b.top + 2;
+          o.set({ left: newLeft, top: newTop });
+        });
+        canvas.renderAll();
+        break;
+      }
+
+      case 'pf-colour-rgb': {
+        // Flag objects with RGB-only fills by adding a visual highlight; user must remap manually
+        break;
+      }
+
+      case 'pf-fontsize': {
+        const MIN_PX = 6 * 1.333;
+        artObjects
+          .filter((o: any) => (o.type === 'text' || o.type === 'i-text') && (o.fontSize || 12) < MIN_PX)
+          .forEach((o: any) => o.set({ fontSize: Math.ceil(MIN_PX) }));
+        canvas.renderAll();
+        break;
+      }
+
+      case 'pf-fonts': {
+        setExportOptions({ outlineFonts: true });
+        break;
+      }
+
+      case 'pf-barcode': {
+        (window as any).__lf_addBarcode?.();
+        break;
+      }
+
+      case 'pf-barcode-qz': {
+        const barcodes = artObjects.filter((o: any) => o.data?.layer === 'barcode' || o.data?.name?.toLowerCase().includes('barcode'));
+        if (barcodes.length) {
+          const bc = barcodes[0];
+          const minQZ = 5 * MM_TO_PX;
+          const bcW = bc.getScaledWidth();
+          let newLeft = bc.left ?? 0;
+          if (newLeft - labelX < minQZ) newLeft = labelX + minQZ;
+          if ((labelX + labelW) - (newLeft + bcW) < minQZ) newLeft = labelX + labelW - bcW - minQZ;
+          bc.set({ left: newLeft });
+          canvas.renderAll();
+        }
+        break;
+      }
+
+      case 'pf-nutrition': {
+        (window as any).__lf_addNutritionPanel?.({});
+        break;
+      }
+
+      case 'pf-origin': {
+        const { fabric } = await import('fabric');
+        const t = new fabric.IText('Made in New Zealand', {
+          left: labelX + 10,
+          top: labelY + labelH - 20,
+          fontSize: 8, fill: '#000000', fontFamily: 'Inter, sans-serif',
+          data: { id: `text-origin-${Date.now()}`, layer: 'text' },
+        });
+        canvas.add(t);
+        canvas.setActiveObject(t);
+        canvas.renderAll();
+        break;
+      }
+    }
+
+    refresh();
   }
 
   const items = filter === 'all' ? allItems : allItems.filter((i) => i.status === filter);
@@ -158,7 +297,7 @@ export default function PreflightPanel({ onClose, onExport, fabricRef }: Props) 
         {/* Items */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
           {items.map((item) => (
-            <PreflightRow key={item.id} item={item} />
+            <PreflightRow key={item.id} item={item} onFix={applyFix} />
           ))}
         </div>
 

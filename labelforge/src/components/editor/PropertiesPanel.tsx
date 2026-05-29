@@ -118,6 +118,7 @@ export default function PropertiesPanel({ fabricRef }: { fabricRef: React.Mutabl
       underline: obj.underline,
       textAlign: obj.textAlign,
       text: obj.text,
+      layer: obj.data?.layer,
     };
   }
 
@@ -370,6 +371,16 @@ export default function PropertiesPanel({ fabricRef }: { fabricRef: React.Mutabl
         <Label>Layer</Label>
         <select
           value={p.layer || 'artwork'}
+          onChange={(e) => {
+            const canvas = fabricRef.current;
+            if (!canvas) return;
+            const obj = canvas.getActiveObject();
+            if (obj) {
+              obj.data = { ...obj.data, layer: e.target.value };
+              canvas.renderAll();
+              setSelectedObject(obj.data?.id || 'obj', readObjProps(obj));
+            }
+          }}
           className="w-full bg-forge-panel border border-forge-border rounded-lg px-2 py-1.5 text-xs text-forge-text focus:outline-none focus:border-forge-accent"
         >
           {['artwork', 'text', 'images', 'barcode'].map((l) => (
